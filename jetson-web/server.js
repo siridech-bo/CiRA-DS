@@ -58,4 +58,6 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.listen(PORT, () => {});
+app.listen(PORT, () => {
+  console.log(`Web server running at http://localhost:${PORT}/`);
+});

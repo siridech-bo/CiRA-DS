@@ -38,6 +38,36 @@
       if (window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(url); hls.attachMedia(video); } else { video.src = url; }
       video.play();
     }
+    async function updateInference() {
+      const payload = {
+        infer_name: document.getElementById('inferName').value || 'primary-detector',
+        batch_size: Number(document.getElementById('batchSize').value || 1),
+        interval: Number(document.getElementById('interval').value || 1),
+        gpu_id: Number(document.getElementById('gpuId').value || 0)
+      };
+      try {
+        const r = await fetch('/api/infer', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await r.json(); document.getElementById('inferStatus').textContent = JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('inferStatus').textContent = e.message;
+      }
+    }
+    async function addROI() {
+      const payload = {
+        stream_id: document.getElementById('roiStreamId').value || 'stream_0',
+        roi_id: document.getElementById('roiId').value || 'roi_0',
+        left: Number(document.getElementById('roiLeft').value || 0),
+        top: Number(document.getElementById('roiTop').value || 0),
+        width: Number(document.getElementById('roiWidth').value || 100),
+        height: Number(document.getElementById('roiHeight').value || 100)
+      };
+      try {
+        const r = await fetch('/api/roi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await r.json(); document.getElementById('roiStatus').textContent = JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('roiStatus').textContent = e.message;
+      }
+    }
     window.addEventListener('load', health);
   </script>
   </head>
@@ -61,6 +91,30 @@
       <div class="status" id="status"></div>
       <h3>Health</h3>
       <div class="status" id="health"></div>
+    </div>
+    <div class="card">
+      <h2>Inference</h2>
+      <input id="inferName" placeholder="primary-detector" />
+      <input id="batchSize" type="number" placeholder="batch size" />
+      <input id="interval" type="number" placeholder="interval" />
+      <input id="gpuId" type="number" placeholder="gpu id" />
+      <div class="row">
+        <button onclick="updateInference()">Update Inference</button>
+      </div>
+      <div class="status" id="inferStatus"></div>
+    </div>
+    <div class="card">
+      <h2>ROI</h2>
+      <input id="roiStreamId" placeholder="stream_0" />
+      <input id="roiId" placeholder="roi_0" />
+      <input id="roiLeft" type="number" placeholder="left" />
+      <input id="roiTop" type="number" placeholder="top" />
+      <input id="roiWidth" type="number" placeholder="width" />
+      <input id="roiHeight" type="number" placeholder="height" />
+      <div class="row">
+        <button onclick="addROI()">Add/Update ROI</button>
+      </div>
+      <div class="status" id="roiStatus"></div>
     </div>
   </div>
 </body>
