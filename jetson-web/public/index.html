@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepStream Web</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; padding: 16px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; max-width: 960px; margin: 0 auto; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+    input, button, select { font-size: 16px; padding: 8px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+    video { width: 100%; height: auto; background: #000; }
+    .row { display: flex; gap: 8px; }
+    .row > button { flex: 1; }
+    .status { font-size: 14px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script>
+    async function health() {
+      const el = document.getElementById('health');
+      try { const r = await fetch('/api/health'); const j = await r.json(); el.textContent = JSON.stringify(j); } catch (e) { el.textContent = e.message; }
+    }
+    async function addStream() {
+      const uri = document.getElementById('streamUri').value;
+      const payload = { stream_id: 'stream_0', uri, source_id: 0 };
+      const r = await fetch('/api/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const j = await r.json(); document.getElementById('status').textContent = JSON.stringify(j);
+    }
+    async function removeStream() {
+      const r = await fetch('/api/stream/stream_0', { method: 'DELETE' });
+      const j = await r.json(); document.getElementById('status').textContent = JSON.stringify(j);
+    }
+    function playHls() {
+      const url = document.getElementById('hlsUrl').value;
+      const video = document.getElementById('video');
+      if (window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(url); hls.attachMedia(video); } else { video.src = url; }
+      video.play();
+    }
+    window.addEventListener('load', health);
+  </script>
+  </head>
+<body>
+  <div class="grid">
+    <div class="card">
+      <h2>Video</h2>
+      <input id="hlsUrl" placeholder="/video/stream.m3u8" />
+      <div class="row">
+        <button onclick="playHls()">Play</button>
+      </div>
+      <video id="video" playsinline controls muted></video>
+    </div>
+    <div class="card">
+      <h2>Control</h2>
+      <input id="streamUri" placeholder="rtsp://camera-ip/stream" />
+      <div class="row">
+        <button onclick="addStream()">Add Stream</button>
+        <button onclick="removeStream()">Remove Stream</button>
+      </div>
+      <div class="status" id="status"></div>
+      <h3>Health</h3>
+      <div class="status" id="health"></div>
+    </div>
+  </div>
+</body>
+</html>
