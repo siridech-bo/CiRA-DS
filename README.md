@@ -60,6 +60,14 @@ Browsers do not play RTSP directly. Use HLS for broad compatibility.
 - Wrong `DEEPSTREAM_URL`:
   - Update the env var in `docker-compose.yml` or pass it on the command line
 
+### Docker Hub credential helper timeout on Jetson
+Some Jetson environments use `secretservice`/GNOME keyring which can time out when Docker pulls images. Workarounds:
+- Temporary config bypass:
+  - `mkdir -p /tmp/docker-config`
+  - `printf '{"auths":{}}' > /tmp/docker-config/config.json`
+  - `sudo -E DOCKER_CONFIG=/tmp/docker-config docker compose up -d`
+- Remove credential store from `~/.docker/config.json` by ensuring it contains only `{ "auths": {} }`.
+
 ## Stopping/Updating
 - Stop: `docker compose down`
 - Update image after changes: `docker compose build web && docker compose up -d`
