@@ -103,6 +103,7 @@ function dockerRequest(method, path, body) {
 
 const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "nvcr.io/nvidia/deepstream-l4t:6.0.1-samples";
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
+app.use("/snapshots", express.static(SNAP_DIR));
 
 app.post("/api/snapshot/start", async (req, res) => {
   let uri = (req.body && req.body.uri) || "";
@@ -112,8 +113,8 @@ app.post("/api/snapshot/start", async (req, res) => {
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
   const cmd = isRtsp
-    ? `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvideoconvert ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`
-    : `gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvideoconvert ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
+    ? `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`
+    : `gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
   const binds = [`${SNAP_DIR}:${SNAP_DIR}`];
   if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {} }
@@ -159,6 +160,21 @@ app.get("/api/local-health", async (_req, res) => {
   const load = os.loadavg();
   const uptime = os.uptime();
   res.json({ snap: { state, cpuPercent, memUsage, memLimit, gpu, snapCount }, system: { load, uptime } });
+});
+
+app.get("/api/snapshot/list", async (_req, res) => {
+  try {
+    const files = await fs.promises.readdir(SNAP_DIR);
+    const jpgs = files.filter(f => f.toLowerCase().endsWith(".jpg"));
+    const stats = await Promise.all(jpgs.map(async f => {
+      const s = await fs.promises.stat(path.join(SNAP_DIR, f));
+      return { f, t: s.mtimeMs };
+    }));
+    stats.sort((a, b) => b.t - a.t);
+    res.json({ files: stats.slice(0, 20).map(x => x.f) });
+  } catch (e) {
+    res.json({ files: [] });
+  }
 });
 
 app.listen(PORT, () => {

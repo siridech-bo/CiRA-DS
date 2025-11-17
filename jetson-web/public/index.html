@@ -177,6 +177,7 @@
         <button onclick="stopSnap()">Stop</button>
       </div>
       <div class="status" id="snapStatus"></div>
+      <div id="snapGallery" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     </div>
     <div class="card">
       <h2>System Health</h2>
@@ -194,6 +195,7 @@
       try {
         const r = await fetch('/api/snapshot/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, rate }) });
         const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
+        await loadSnapImages();
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
       }
@@ -206,9 +208,25 @@
       try {
         const r = await fetch('/api/snapshot/stop', { method: 'POST' });
         const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
+        await loadSnapImages();
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
       }
+    }
+    async function loadSnapImages() {
+      try {
+        const r = await fetch('/api/snapshot/list');
+        const j = await r.json();
+        const el = document.getElementById('snapGallery');
+        if (!el) return;
+        el.innerHTML = '';
+        (j.files || []).forEach(f => {
+          const img = document.createElement('img');
+          img.src = '/snapshots/' + f;
+          img.width = 160; img.height = 90; img.style.objectFit = 'cover';
+          el.appendChild(img);
+        });
+      } catch (e) {}
     }
   </script>
 </body>
