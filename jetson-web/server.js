@@ -112,23 +112,29 @@ app.post("/api/snapshot/start", async (req, res) => {
   await fs.promises.mkdir(SNAP_DIR, { recursive: true });
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
-  const cmd = isRtsp
-    ? `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`
-    : `gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
+  const ext = (() => { try { return (path.extname(uri) || "").toLowerCase(); } catch { return ""; } })();
+  const cmds = [];
+  if (isRtsp) {
+    cmds.push(`gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+  } else {
+    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+  }
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
   const binds = [`${SNAP_DIR}:${SNAP_DIR}`];
   if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {} }
-  const createBody = {
-    Image: DS_IMAGE,
-    Entrypoint: ["bash"],
-    Cmd: ["-lc", cmd],
-    HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds }
-  };
-  const created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", createBody);
-  if (created.statusCode < 200 || created.statusCode >= 300) return res.status(500).json({ error: created.body });
-  const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
-  if (start.statusCode < 200 || start.statusCode >= 300) return res.status(500).json({ error: start.body });
-  res.json({ ok: true });
+  let ok = false, used = "";
+  for (const c of cmds) {
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+    const created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", body);
+    if (created.statusCode < 200 || created.statusCode >= 300) continue;
+    const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
+    if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = c; break; }
+  }
+  if (!ok) return res.status(500).json({ error: "failed to start snapshot" });
+  res.json({ ok: true, pipeline: used });
 });
 
 app.post("/api/snapshot/stop", async (_req, res) => {
