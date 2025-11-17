@@ -203,9 +203,9 @@
       try {
         const r = await fetch('/api/snapshot/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, rate }) });
         const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
-        await loadSnapImages();
+        await loadSnapImages(false);
         if (window.snapTimer) clearInterval(window.snapTimer);
-        window.snapTimer = setInterval(async () => { await loadSnapImages(); await localHealth(); }, 3000);
+        window.snapTimer = setInterval(async () => { await loadSnapImages(false); await localHealth(); }, 3000);
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
       }
@@ -218,7 +218,7 @@
       try {
         const r = await fetch('/api/snapshot/stop', { method: 'POST' });
         const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
-        await loadSnapImages();
+        await loadSnapImages(true);
         if (window.snapTimer) { clearInterval(window.snapTimer); window.snapTimer = null; }
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
@@ -231,9 +231,9 @@
         document.getElementById('snapStatus').textContent = t;
       } catch (e) { document.getElementById('snapStatus').textContent = e.message; }
     }
-    async function loadSnapImages() {
+    async function loadSnapImages(limitAll) {
       try {
-        const r = await fetch('/api/snapshot/list');
+        const r = await fetch('/api/snapshot/list' + (limitAll ? '?limit=100000' : ''));
         const j = await r.json();
         const files = j.files || [];
         const prevLen = (window.snapFiles && window.snapFiles.length) || 0;

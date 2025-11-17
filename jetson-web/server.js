@@ -175,7 +175,7 @@ app.get("/api/local-health", async (_req, res) => {
   res.json({ snap: { state, cpuPercent, memUsage, memLimit, gpu, snapCount }, system: { load, uptime } });
 });
 
-app.get("/api/snapshot/list", async (_req, res) => {
+app.get("/api/snapshot/list", async (req, res) => {
   try {
     const files = await fs.promises.readdir(SNAP_DIR);
     const jpgs = files.filter(f => f.toLowerCase().endsWith(".jpg"));
@@ -184,7 +184,8 @@ app.get("/api/snapshot/list", async (_req, res) => {
       return { f, t: s.mtimeMs };
     }));
     stats.sort((a, b) => b.t - a.t);
-    res.json({ files: stats.slice(0, 20).map(x => x.f) });
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 20), 100000));
+    res.json({ files: stats.slice(0, limit).map(x => x.f) });
   } catch (e) {
     res.json({ files: [] });
   }
