@@ -226,10 +226,10 @@ function buildSampleCmd(sample, uris) {
     h265: `${base}/samples/streams/sample_720p.h265`,
   };
   if (sample === "app_source1") {
-    return `cd ${base}/samples/configs/deepstream-app && deepstream-app -c source1_1080p_dec_infer-resnet_int8.txt`;
+    return `cd ${base}/samples/configs/deepstream-app && (deepstream-app -c source1_1080p_dec_infer-resnet_int8.txt || deepstream-app -c source1_1080p_dec_infer-resnet.txt)`;
   }
   if (sample === "app_source30") {
-    return `cd ${base}/samples/configs/deepstream-app && deepstream-app -c source30_1080p_dec_infer-resnet_tiled_display_int8.txt`;
+    return `cd ${base}/samples/configs/deepstream-app && (deepstream-app -c source30_1080p_dec_infer-resnet_tiled_display_int8.txt || deepstream-app -c source30_1080p_dec_infer-resnet_tiled_display_fp16.txt)`;
   }
   const bin = bins[sample] || bins.test1;
   const args = Array.isArray(uris) && uris.length ? uris.map(u => u.startsWith("file://") ? u.replace(/^file:\/\//, "") : u) : [streams.h264];
