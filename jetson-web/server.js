@@ -72,6 +72,41 @@ app.get("/api/message", (_req, res) => {
   res.json({ messages });
 });
 
+app.delete("/api/message", (_req, res) => {
+  messages = [];
+  res.json({ ok: true });
+});
+
+import { exec } from "child_process";
+import fs from "fs";
+import os from "os";
+
+function run(cmd) {
+  return new Promise((resolve) => {
+    exec(cmd, { windowsHide: true }, (err, stdout, stderr) => {
+      resolve({ ok: !err, stdout, stderr, error: err ? String(err) : "" });
+    });
+  });
+}
+
+const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "nvcr.io/nvidia/deepstream-l4t:6.0.1-samples";
+const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
+
+app.post("/api/snapshot/start", async (req, res) => {
+  const uri = (req.body && req.body.uri) || "";
+  const rate = Number((req.body && req.body.rate) || 1);
+  if (!uri) return res.status(400).json({ error: "uri required" });
+  await fs.promises.mkdir(SNAP_DIR, { recursive: true });
+  const cmd = `docker rm -f ds_snapshot 2>NUL || true && docker run -d --name ds_snapshot --net=host --runtime nvidia -v ${SNAP_DIR}:${SNAP_DIR} ${DS_IMAGE} bash -lc "gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg"`;
+  const r = await run(cmd);
+  res.json(r);
+});
+
+app.post("/api/snapshot/stop", async (_req, res) => {
+  const r = await run("docker rm -f ds_snapshot");
+  res.json(r);
+});
+
 app.listen(PORT, () => {
   console.log(`Web server running at http://localhost:${PORT}/`);
 });

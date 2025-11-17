@@ -88,6 +88,16 @@
         document.getElementById('msgList').textContent = e.message;
       }
     }
+    async function clearMessages() {
+      try {
+        const r = await fetch('/api/message', { method: 'DELETE' });
+        const j = await r.json();
+        document.getElementById('msgStatus').textContent = JSON.stringify(j);
+        await loadMessages();
+      } catch (e) {
+        document.getElementById('msgStatus').textContent = e.message;
+      }
+    }
     window.addEventListener('load', () => { health(); loadMessages(); });
   </script>
   </head>
@@ -142,6 +152,7 @@
       <div class="row">
         <button onclick="sendMessage()">Send</button>
         <button onclick="loadMessages()">Refresh</button>
+        <button onclick="clearMessages()">Clear</button>
       </div>
       <div class="status" id="msgStatus"></div>
       <div class="status" id="msgList" style="white-space:pre-wrap"></div>

@@ -4,10 +4,15 @@ services:
     image: jetson-web:local
     environment:
       - DEEPSTREAM_URL=http://192.168.1.200:8080/api/v1
+      - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
     ports:
       - "80:80"
     restart: unless-stopped
     volumes:
       - /data/hls:/app/public/video
+      - ./jetson-web/server.js:/app/server.js
+      - ./jetson-web/public/index.html:/app/public/index.html
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /data/snapshots:/data/snapshots
       - ./jetson-web/server.js:/app/server.js
       - ./jetson-web/public/index.html:/app/public/index.html
