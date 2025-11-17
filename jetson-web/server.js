@@ -117,9 +117,9 @@ app.post("/api/snapshot/start", async (req, res) => {
   if (isRtsp) {
     cmds.push(`gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
   } else {
+    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
-    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
   }
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
   const binds = [`${SNAP_DIR}:${SNAP_DIR}`];
