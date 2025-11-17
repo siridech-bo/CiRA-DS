@@ -9,3 +9,5 @@ services:
     restart: unless-stopped
     volumes:
       - /data/hls:/app/public/video
+      - ./jetson-web/server.js:/app/server.js
+      - ./jetson-web/public/index.html:/app/public/index.html
