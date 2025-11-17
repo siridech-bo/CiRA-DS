@@ -99,7 +99,16 @@
         document.getElementById('msgStatus').textContent = e.message;
       }
     }
-    window.addEventListener('load', () => { health(); loadMessages(); });
+    async function localHealth() {
+      try {
+        const r = await fetch('/api/local-health');
+        const j = await r.json();
+        document.getElementById('localHealth').textContent = JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('localHealth').textContent = e.message;
+      }
+    }
+    window.addEventListener('load', () => { health(); loadMessages(); localHealth(); });
   </script>
   </head>
 <body>

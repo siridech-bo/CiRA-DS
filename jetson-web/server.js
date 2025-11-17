@@ -79,6 +79,7 @@ app.delete("/api/message", (_req, res) => {
 
 import fs from "fs";
 import http from "http";
+import os from "os";
 
 function dockerRequest(method, path, body) {
   return new Promise((resolve) => {
@@ -132,6 +133,31 @@ app.post("/api/snapshot/stop", async (_req, res) => {
   await dockerRequest("POST", "/containers/ds_snapshot/stop");
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
   res.json({ ok: true });
+});
+
+function toNumber(v) { try { return Number(v) || 0; } catch { return 0; } }
+
+app.get("/api/local-health", async (_req, res) => {
+  let snapCount = 0;
+  try { const files = await fs.promises.readdir(SNAP_DIR); snapCount = files.filter(f => f.endsWith(".jpg")).length; } catch {}
+  const info = await dockerRequest("GET", "/containers/ds_snapshot/json");
+  let state = null;
+  try { state = JSON.parse(info.body).State || null; } catch {}
+  const statsResp = await dockerRequest("GET", "/containers/ds_snapshot/stats?stream=false");
+  let cpuPercent = 0, memUsage = 0, memLimit = 0, gpu = null;
+  try {
+    const s = JSON.parse(statsResp.body);
+    const cpuDelta = toNumber(s.cpu_stats && s.cpu_stats.cpu_usage && s.cpu_stats.cpu_usage.total_usage) - toNumber(s.precpu_stats && s.precpu_stats.cpu_usage && s.precpu_stats.cpu_usage.total_usage);
+    const sysDelta = toNumber(s.cpu_stats && s.cpu_stats.system_cpu_usage) - toNumber(s.precpu_stats && s.precpu_stats.system_cpu_usage);
+    const cpus = (s.cpu_stats && s.cpu_stats.online_cpus) || (s.cpu_stats && s.cpu_stats.cpu_usage && s.cpu_stats.cpu_usage.percpu_usage && s.cpu_stats.cpu_usage.percpu_usage.length) || 1;
+    cpuPercent = sysDelta > 0 ? (cpuDelta / sysDelta) * cpus * 100 : 0;
+    memUsage = toNumber(s.memory_stats && s.memory_stats.usage);
+    memLimit = toNumber(s.memory_stats && s.memory_stats.limit);
+    gpu = s.gpu_stats || null;
+  } catch {}
+  const load = os.loadavg();
+  const uptime = os.uptime();
+  res.json({ snap: { state, cpuPercent, memUsage, memLimit, gpu, snapCount }, system: { load, uptime } });
 });
 
 app.listen(PORT, () => {
