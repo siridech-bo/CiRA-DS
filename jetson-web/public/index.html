@@ -68,7 +68,27 @@
         document.getElementById('roiStatus').textContent = e.message;
       }
     }
-    window.addEventListener('load', health);
+    async function sendMessage() {
+      const text = document.getElementById('msgText').value || '';
+      try {
+        const r = await fetch('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+        const j = await r.json(); document.getElementById('msgStatus').textContent = JSON.stringify(j);
+        await loadMessages();
+      } catch (e) {
+        document.getElementById('msgStatus').textContent = e.message;
+      }
+    }
+    async function loadMessages() {
+      try {
+        const r = await fetch('/api/message');
+        const j = await r.json();
+        const lines = (j.messages || []).slice(-50).map(m => new Date(m.ts).toISOString() + ' ' + m.text).join('\n');
+        document.getElementById('msgList').textContent = lines || '(no messages)';
+      } catch (e) {
+        document.getElementById('msgList').textContent = e.message;
+      }
+    }
+    window.addEventListener('load', () => { health(); loadMessages(); });
   </script>
   </head>
 <body>
@@ -115,6 +135,16 @@
         <button onclick="addROI()">Add/Update ROI</button>
       </div>
       <div class="status" id="roiStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Messages</h2>
+      <textarea id="msgText" rows="4" placeholder="Type a message to send"></textarea>
+      <div class="row">
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="loadMessages()">Refresh</button>
+      </div>
+      <div class="status" id="msgStatus"></div>
+      <div class="status" id="msgList" style="white-space:pre-wrap"></div>
     </div>
   </div>
 </body>

@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";
+let messages = [];
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -56,6 +57,19 @@ app.get("/api/health", async (_req, res) => {
   } catch (e) {
     res.status(503).json({ status: "disconnected", error: "Cannot reach DeepStream" });
   }
+});
+
+app.post("/api/message", (req, res) => {
+  const t = (req.body && req.body.text) || "";
+  if (!t) return res.status(400).json({ error: "text required" });
+  const m = { text: t, ts: Date.now() };
+  messages.push(m);
+  if (messages.length > 500) messages.shift();
+  res.json({ ok: true });
+});
+
+app.get("/api/message", (_req, res) => {
+  res.json({ messages });
 });
 
 app.listen(PORT, () => {
