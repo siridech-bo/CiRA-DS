@@ -210,3 +210,70 @@ app.get("/api/snapshot/list", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Web server running at http://localhost:${PORT}/`);
 });
+
+const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
+function buildSampleCmd(sample, uris) {
+  const base = "/opt/nvidia/deepstream/deepstream-6.0";
+  const bins = {
+    test1: `${base}/sources/apps/sample_apps/deepstream-test1/deepstream-test1-app`,
+    test2: `${base}/sources/apps/sample_apps/deepstream-test2/deepstream-test2-app`,
+    test3: `${base}/sources/apps/sample_apps/deepstream-test3/deepstream-test3-app`,
+    test5: `${base}/sources/apps/sample_apps/deepstream-test5/deepstream-test5-app`,
+    testsr: `${base}/sources/apps/sample_apps/deepstream-testsr/deepstream-testsr-app`,
+  };
+  const streams = {
+    h264: `${base}/samples/streams/sample_720p.h264`,
+    h265: `${base}/samples/streams/sample_720p.h265`,
+  };
+  if (sample === "app_source1") {
+    return `deepstream-app -c ${base}/samples/configs/deepstream-app/source1_1080p_dec_infer-resnet_int8.txt`;
+  }
+  if (sample === "app_source30") {
+    return `deepstream-app -c ${base}/samples/configs/deepstream-app/source30_1080p_dec_infer-resnet_tiled_display_int8.txt`;
+  }
+  const bin = bins[sample] || bins.test1;
+  const args = Array.isArray(uris) && uris.length ? uris.map(u => u.startsWith("file://") ? u.replace(/^file:\/\//, "") : u) : [streams.h264];
+  return `${bin} ${args.join(" ")}`;
+}
+
+app.get("/api/dsapp/samples", (_req, res) => {
+  res.json({ samples: [
+    { id: "test1", label: "Test1 Single Source" },
+    { id: "test2", label: "Test2 Multi Source" },
+    { id: "test3", label: "Test3 SGIE" },
+    { id: "test5", label: "Test5 Analytics" },
+    { id: "testsr", label: "Smart Record" },
+    { id: "app_source1", label: "deepstream-app Source1" },
+    { id: "app_source30", label: "deepstream-app Source30 Tiled" }
+  ]});
+});
+
+app.post("/api/dsapp/start", async (req, res) => {
+  const sample = (req.body && req.body.sample) || "test1";
+  const uris = (req.body && req.body.uris) || [];
+  const image = (req.body && req.body.image) || DS_APP_IMAGE;
+  const cmd = buildSampleCmd(sample, uris);
+  await dockerRequest("DELETE", "/containers/ds_app?force=true");
+  const binds = ["/tmp/.X11-unix:/tmp/.X11-unix"];
+  const env = [
+    `DISPLAY=${process.env.DISPLAY || ":0"}`,
+    "CUDA_VER=10.2",
+    "PLATFORM_TEGRA=1",
+    "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+  ];
+  const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+  const created = await dockerRequest("POST", "/containers/create?name=ds_app", body);
+  const start = await dockerRequest("POST", "/containers/ds_app/start");
+  res.json({ ok: start.statusCode >= 200 && start.statusCode < 300, cmd, image });
+});
+
+app.post("/api/dsapp/stop", async (_req, res) => {
+  await dockerRequest("POST", "/containers/ds_app/stop");
+  await dockerRequest("DELETE", "/containers/ds_app?force=true");
+  res.json({ ok: true });
+});
+
+app.get("/api/dsapp/logs", async (_req, res) => {
+  const logs = await dockerRequest("GET", "/containers/ds_app/logs?stdout=1&stderr=1&tail=200");
+  res.type("text/plain").send(logs.body || "");
+});

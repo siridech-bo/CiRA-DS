@@ -196,6 +196,20 @@
       </div>
       <div class="status" id="localHealth"></div>
     </div>
+    <div class="card">
+      <h2>DeepStream Samples</h2>
+      <select id="dsSample"></select>
+      <textarea id="dsUris" rows="3" placeholder="Optional file paths, one per line"></textarea>
+      <input id="dsImage" placeholder="Optional image override (e.g., siridech/deepstream-l4t:6.0.1-triton-prebuilt)" />
+      <div class="row">
+        <button onclick="loadSamples()">List</button>
+        <button onclick="startDsApp()">Run</button>
+        <button onclick="stopDsApp()">Stop</button>
+        <button onclick="logsDsApp()">Logs</button>
+      </div>
+      <div class="status" id="dsStatus"></div>
+      <div class="status" id="dsLogs" style="white-space:pre-wrap"></div>
+    </div>
   </div>
   <script>
     async function startSnap() {
@@ -271,6 +285,10 @@
     function prevSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + n - 1) % n; renderSnap(); }
     function nextSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + 1) % n; renderSnap(); }
     function clearMsgText() { document.getElementById('msgText').value = ''; }
+    async function loadSamples() { try { const r = await fetch('/api/dsapp/samples'); const j = await r.json(); const sel = document.getElementById('dsSample'); sel.innerHTML = ''; (j.samples||[]).forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.label; sel.appendChild(o); }); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
+    async function startDsApp() { const sample = document.getElementById('dsSample').value || 'test1'; const image = document.getElementById('dsImage').value || ''; const text = document.getElementById('dsUris').value || ''; const uris = text.split('\n').map(s => s.trim()).filter(Boolean); try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample, uris, image }) }); const j = await r.json(); document.getElementById('dsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
+    async function stopDsApp() { try { const r = await fetch('/api/dsapp/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('dsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
+    async function logsDsApp() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); document.getElementById('dsLogs').textContent = t; } catch (e) { document.getElementById('dsLogs').textContent = e.message; } }
   </script>
 </body>
 </html>
