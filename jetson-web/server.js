@@ -77,15 +77,26 @@ app.delete("/api/message", (_req, res) => {
   res.json({ ok: true });
 });
 
-import { exec } from "child_process";
 import fs from "fs";
-import os from "os";
+import http from "http";
 
-function run(cmd) {
+function dockerRequest(method, path, body) {
   return new Promise((resolve) => {
-    exec(cmd, { windowsHide: true }, (err, stdout, stderr) => {
-      resolve({ ok: !err, stdout, stderr, error: err ? String(err) : "" });
+    const opts = { socketPath: "/var/run/docker.sock", path, method, headers: {} };
+    let payload = null;
+    if (body) {
+      payload = Buffer.from(JSON.stringify(body));
+      opts.headers["Content-Type"] = "application/json";
+      opts.headers["Content-Length"] = String(payload.length);
+    }
+    const req = http.request(opts, (resp) => {
+      let data = "";
+      resp.on("data", (c) => { data += c; });
+      resp.on("end", () => { resolve({ statusCode: resp.statusCode || 0, body: data }); });
     });
+    req.on("error", (e) => { resolve({ statusCode: 0, body: String(e) }); });
+    if (payload) req.write(payload);
+    req.end();
   });
 }
 
@@ -97,14 +108,25 @@ app.post("/api/snapshot/start", async (req, res) => {
   const rate = Number((req.body && req.body.rate) || 1);
   if (!uri) return res.status(400).json({ error: "uri required" });
   await fs.promises.mkdir(SNAP_DIR, { recursive: true });
-  const cmd = `docker rm -f ds_snapshot 2>NUL || true && docker run -d --name ds_snapshot --net=host --runtime nvidia -v ${SNAP_DIR}:${SNAP_DIR} ${DS_IMAGE} bash -lc "gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg"`;
-  const r = await run(cmd);
-  res.json(r);
+  const cmd = `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
+  await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+  const createBody = {
+    Image: DS_IMAGE,
+    Entrypoint: ["bash"],
+    Cmd: ["-lc", cmd],
+    HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: [`${SNAP_DIR}:${SNAP_DIR}`] }
+  };
+  const created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", createBody);
+  if (created.statusCode < 200 || created.statusCode >= 300) return res.status(500).json({ error: created.body });
+  const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
+  if (start.statusCode < 200 || start.statusCode >= 300) return res.status(500).json({ error: start.body });
+  res.json({ ok: true });
 });
 
 app.post("/api/snapshot/stop", async (_req, res) => {
-  const r = await run("docker rm -f ds_snapshot");
-  res.json(r);
+  await dockerRequest("POST", "/containers/ds_snapshot/stop");
+  await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+  res.json({ ok: true });
 });
 
 app.listen(PORT, () => {
