@@ -167,6 +167,23 @@
       <div class="status" id="msgStatus"></div>
       <div class="status" id="msgList" style="white-space:pre-wrap"></div>
     </div>
+    <div class="card">
+      <h2>Snapshot</h2>
+      <input id="snapUri" placeholder="rtsp://... or /data/videos/file.mp4" />
+      <input id="snapRate" type="number" placeholder="rate per second" />
+      <div class="row">
+        <button onclick="startSnap()">Start</button>
+        <button onclick="stopSnap()">Stop</button>
+      </div>
+      <div class="status" id="snapStatus"></div>
+    </div>
+    <div class="card">
+      <h2>System Health</h2>
+      <div class="row">
+        <button onclick="localHealth()">Refresh</button>
+      </div>
+      <div class="status" id="localHealth"></div>
+    </div>
   </div>
   <script>
     async function startSnap() {
