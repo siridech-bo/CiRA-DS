@@ -172,6 +172,7 @@
       <input id="snapUri" placeholder="rtsp://... or /data/videos/file.mp4" />
       <input id="snapRate" type="number" placeholder="rate per second" />
       <div class="row">
+        <button onclick="useVideoForSnap()">Use Video</button>
         <button onclick="startSnap()">Start</button>
         <button onclick="stopSnap()">Stop</button>
       </div>
@@ -187,7 +188,8 @@
   </div>
   <script>
     async function startSnap() {
-      const uri = document.getElementById('snapUri').value || '';
+      let uri = document.getElementById('snapUri').value || '';
+      if (!uri) { uri = document.getElementById('hlsUrl').value || ''; }
       const rate = Number(document.getElementById('snapRate').value || 1);
       try {
         const r = await fetch('/api/snapshot/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, rate }) });
@@ -195,6 +197,10 @@
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
       }
+    }
+    function useVideoForSnap() {
+      const url = document.getElementById('hlsUrl').value || '';
+      document.getElementById('snapUri').value = url;
     }
     async function stopSnap() {
       try {

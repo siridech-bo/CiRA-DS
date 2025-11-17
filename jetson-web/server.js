@@ -105,10 +105,11 @@ const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "nvcr.io/nvidia/deepstream-l4t:
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 
 app.post("/api/snapshot/start", async (req, res) => {
-  const uri = (req.body && req.body.uri) || "";
+  let uri = (req.body && req.body.uri) || "";
   const rate = Number((req.body && req.body.rate) || 1);
   if (!uri) return res.status(400).json({ error: "uri required" });
   await fs.promises.mkdir(SNAP_DIR, { recursive: true });
+  if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
   const cmd = isRtsp
     ? `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvideoconvert ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`
