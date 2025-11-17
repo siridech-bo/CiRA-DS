@@ -158,10 +158,11 @@
     </div>
     <div class="card">
       <h2>Messages</h2>
-      <textarea id="msgText" rows="4" placeholder="Type a message to send"></textarea>
+      <textarea id="msgText" rows="8" style="width:100%;height:160px" placeholder="Type a message to send"></textarea>
       <div class="row">
         <button onclick="sendMessage()">Send</button>
         <button onclick="loadMessages()">Refresh</button>
+        <button onclick="clearMsgText()">Clear Text</button>
         <button onclick="clearMessages()">Clear</button>
       </div>
       <div class="status" id="msgStatus"></div>
@@ -175,6 +176,7 @@
         <button onclick="useVideoForSnap()">Use Video</button>
         <button onclick="startSnap()">Start</button>
         <button onclick="stopSnap()">Stop</button>
+        <button onclick="clearSnap()">Clear Images</button>
         <button onclick="loadSnapLogs()">Logs</button>
       </div>
       <div class="status" id="snapStatus"></div>
@@ -231,6 +233,19 @@
         document.getElementById('snapStatus').textContent = t;
       } catch (e) { document.getElementById('snapStatus').textContent = e.message; }
     }
+    async function clearSnap() {
+      try {
+        const r = await fetch('/api/snapshot/clear', { method: 'DELETE' });
+        const j = await r.json();
+        document.getElementById('snapStatus').textContent = JSON.stringify(j);
+        window.snapFiles = [];
+        window.snapIndex = 0;
+        renderSnap();
+        await loadSnapImages(true);
+      } catch (e) {
+        document.getElementById('snapStatus').textContent = e.message;
+      }
+    }
     async function loadSnapImages(limitAll) {
       try {
         const r = await fetch('/api/snapshot/list' + (limitAll ? '?limit=100000' : ''));
@@ -255,6 +270,7 @@
     }
     function prevSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + n - 1) % n; renderSnap(); }
     function nextSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + 1) % n; renderSnap(); }
+    function clearMsgText() { document.getElementById('msgText').value = ''; }
   </script>
 </body>
 </html>

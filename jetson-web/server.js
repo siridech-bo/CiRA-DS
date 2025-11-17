@@ -150,6 +150,22 @@ app.post("/api/snapshot/stop", async (_req, res) => {
   res.json({ ok: true });
 });
 
+app.delete("/api/snapshot/clear", async (_req, res) => {
+  try {
+    await fs.promises.mkdir(SNAP_DIR, { recursive: true });
+    const files = await fs.promises.readdir(SNAP_DIR);
+    let deleted = 0;
+    await Promise.all(files.map(async (f) => {
+      if (f.toLowerCase().endsWith(".jpg")) {
+        try { await fs.promises.unlink(path.join(SNAP_DIR, f)); deleted++; } catch {}
+      }
+    }));
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 function toNumber(v) { try { return Number(v) || 0; } catch { return 0; } }
 
 app.get("/api/local-health", async (_req, res) => {
