@@ -233,7 +233,9 @@ function buildSampleCmd(sample, uris) {
   }
   const bin = bins[sample] || bins.test1;
   const args = Array.isArray(uris) && uris.length ? uris.map(u => u.startsWith("file://") ? u.replace(/^file:\/\//, "") : u) : [streams.h264];
-  return `${bin} ${args.join(" ")}`;
+  const dir = path.dirname(bin);
+  const exe = path.basename(bin);
+  return `cd ${dir} && ./${exe} ${args.join(" ")}`;
 }
 
 app.get("/api/dsapp/samples", (_req, res) => {
