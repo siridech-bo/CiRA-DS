@@ -117,6 +117,7 @@ app.post("/api/snapshot/start", async (req, res) => {
   if (isRtsp) {
     cmds.push(`gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
   } else {
+    cmds.push(`gst-launch-1.0 uridecodebin uri='file://${uri}' ! videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
@@ -135,6 +136,11 @@ app.post("/api/snapshot/start", async (req, res) => {
   }
   if (!ok) return res.status(500).json({ error: "failed to start snapshot" });
   res.json({ ok: true, pipeline: used });
+});
+
+app.get("/api/snapshot/logs", async (_req, res) => {
+  const logs = await dockerRequest("GET", "/containers/ds_snapshot/logs?stdout=1&stderr=1&tail=200");
+  res.type("text/plain").send(logs.body || "");
 });
 
 app.post("/api/snapshot/stop", async (_req, res) => {
