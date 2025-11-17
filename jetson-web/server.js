@@ -108,13 +108,18 @@ app.post("/api/snapshot/start", async (req, res) => {
   const rate = Number((req.body && req.body.rate) || 1);
   if (!uri) return res.status(400).json({ error: "uri required" });
   await fs.promises.mkdir(SNAP_DIR, { recursive: true });
-  const cmd = `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
+  const isRtsp = uri.startsWith("rtsp://");
+  const cmd = isRtsp
+    ? `gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvideoconvert ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`
+    : `gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvideoconvert ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`;
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+  const binds = [`${SNAP_DIR}:${SNAP_DIR}`];
+  if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {} }
   const createBody = {
     Image: DS_IMAGE,
     Entrypoint: ["bash"],
     Cmd: ["-lc", cmd],
-    HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: [`${SNAP_DIR}:${SNAP_DIR}`] }
+    HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds }
   };
   const created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", createBody);
   if (created.statusCode < 200 || created.statusCode >= 300) return res.status(500).json({ error: created.body });

@@ -158,5 +158,25 @@
       <div class="status" id="msgList" style="white-space:pre-wrap"></div>
     </div>
   </div>
+  <script>
+    async function startSnap() {
+      const uri = document.getElementById('snapUri').value || '';
+      const rate = Number(document.getElementById('snapRate').value || 1);
+      try {
+        const r = await fetch('/api/snapshot/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, rate }) });
+        const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('snapStatus').textContent = e.message;
+      }
+    }
+    async function stopSnap() {
+      try {
+        const r = await fetch('/api/snapshot/stop', { method: 'POST' });
+        const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('snapStatus').textContent = e.message;
+      }
+    }
+  </script>
 </body>
 </html>
