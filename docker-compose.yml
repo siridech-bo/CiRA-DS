@@ -5,6 +5,7 @@ services:
     environment:
       - DEEPSTREAM_URL=http://192.168.1.200:8080/api/v1
       - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
+      - DS_APP_IMAGE=siridech2/deepstream-l4t:6.0.1-triton-prebuilt
     ports:
       - "80:80"
     restart: unless-stopped

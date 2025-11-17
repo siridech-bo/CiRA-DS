@@ -262,9 +262,20 @@ app.post("/api/dsapp/start", async (req, res) => {
     "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
   ];
   const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
-  const created = await dockerRequest("POST", "/containers/create?name=ds_app", body);
+  let created = await dockerRequest("POST", "/containers/create?name=ds_app", body);
+  if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+    await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(image)}`);
+    await dockerRequest("DELETE", "/containers/ds_app?force=true");
+    created = await dockerRequest("POST", "/containers/create?name=ds_app", body);
+  }
+  if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+    return res.status(500).json({ ok: false, cmd, image, error: created.body || "create_failed" });
+  }
   const start = await dockerRequest("POST", "/containers/ds_app/start");
-  res.json({ ok: start.statusCode >= 200 && start.statusCode < 300, cmd, image });
+  if (!(start.statusCode >= 200 && start.statusCode < 300)) {
+    return res.status(500).json({ ok: false, cmd, image, error: start.body || "start_failed" });
+  }
+  res.json({ ok: true, cmd, image });
 });
 
 app.post("/api/dsapp/stop", async (_req, res) => {
