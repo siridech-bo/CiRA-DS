@@ -35,7 +35,8 @@
     function playHls() {
       const url = document.getElementById('hlsUrl').value;
       const video = document.getElementById('video');
-      if (window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(url); hls.attachMedia(video); } else { video.src = url; }
+      const isM3U8 = url.toLowerCase().endsWith('.m3u8');
+      if (isM3U8 && window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(url); hls.attachMedia(video); } else { video.src = url; }
       video.play();
     }
     async function updateInference() {
@@ -105,7 +106,7 @@
   <div class="grid">
     <div class="card">
       <h2>Video</h2>
-      <input id="hlsUrl" placeholder="/video/stream.m3u8" />
+      <input id="hlsUrl" placeholder="/video/stream.m3u8 or /media/bird.mp4" />
       <div class="row">
         <button onclick="playHls()">Play</button>
       </div>
