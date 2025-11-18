@@ -430,3 +430,24 @@ app.post("/api/configs/save", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.get("/api/configs/list", async (req, res) => {
+  try {
+    const d = String(req.query.dir || "/app/configs/");
+    if (!d.startsWith("/app/configs/") || d.includes("..")) return res.status(400).json({ error: "invalid path" });
+    const out = [];
+    async function walk(p, depth) {
+      const ents = await fs.promises.readdir(p, { withFileTypes: true });
+      for (const e of ents) {
+        const full = path.join(p, e.name);
+        if (e.isDirectory()) { if (depth < 4) { await walk(full, depth + 1); } }
+        else { const f = full.toLowerCase(); if (f.endsWith(".ini")) out.push(full); }
+      }
+    }
+    await walk(d, 0);
+    out.sort();
+    res.json({ dir: d, files: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
