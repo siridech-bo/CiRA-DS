@@ -223,8 +223,19 @@
         <button onclick="loadIni()">Load</button>
         <button onclick="saveIni()">Save</button>
         <button onclick="runIni()">Run</button>
+        <button onclick="patchIniLabels()">Patch Labels</button>
       </div>
       <div class="status" id="iniStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Labels</h2>
+      <input id="labelsPath" placeholder="/app/configs/labels.txt" />
+      <textarea id="labelsText" rows="10" style="width:100%;height:200px" placeholder="One label per line"></textarea>
+      <div class="row">
+        <button onclick="loadLabels()">Load</button>
+        <button onclick="saveLabels()">Save</button>
+      </div>
+      <div class="status" id="labelsStatus"></div>
     </div>
   </div>
   <script>
@@ -329,6 +340,60 @@
     }
     async function stopHls() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function logsHls() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsStatus').textContent = t; } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
+    async function patchIniLabels() {
+      const iniPath = document.getElementById('iniPath').value || '/app/configs/rtsp_osd.ini';
+      let txt = document.getElementById('iniText').value || '';
+      let lines = txt.split(/\r?\n/);
+      let inPrimary = false, sawCfg = false, patched = [];
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const s = l.trim();
+        if (s.startsWith('[') && s.endsWith(']')) {
+          if (inPrimary && !sawCfg) { patched.push('config-file=/app/configs/pgie_primary.txt'); }
+          inPrimary = /\[\s*primary-gie\s*\]/i.test(s);
+          sawCfg = false;
+          patched.push(l);
+          continue;
+        }
+        if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { patched.push('config-file=/app/configs/pgie_primary.txt'); sawCfg = true; continue; }
+        patched.push(l);
+      }
+      if (!/\[\s*primary-gie\s*\]/i.test('\n'+txt)) {
+        patched.push('[primary-gie]');
+        patched.push('config-file=/app/configs/pgie_primary.txt');
+      }
+      if (!/\[\s*osd\s*\]/i.test('\n'+txt)) {
+        patched.push('[osd]');
+        patched.push('enable=1');
+        patched.push('display-text=1');
+      } else {
+        let osdLines = [];
+        inPrimary = false; let inOsd = false; lines.forEach((l) => { const s=l.trim(); if (s.startsWith('[') && s.endsWith(']')) { inOsd = /\[\s*osd\s*\]/i.test(s); } });
+      }
+      const newTxt = patched.join('\n');
+      document.getElementById('iniText').value = newTxt;
+      const pgie = [
+        '[property]',
+        'gpu-id=0',
+        'network-type=0',
+        'model-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.caffemodel',
+        'proto-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.prototxt',
+        'batch-size=1',
+        'interval=0',
+        'gie-unique-id=1',
+        'maintain-aspect-ratio=1',
+        'labelfile-path=/app/configs/labels.txt'
+      ].join('\n');
+      try {
+        const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: pgie }) });
+        const j = await r.json();
+        document.getElementById('iniStatus').textContent = 'Patched. PGIE: ' + JSON.stringify(j);
+      } catch (e) {
+        document.getElementById('iniStatus').textContent = e.message;
+      }
+    }
+    async function loadLabels() { try { const p = document.getElementById('labelsPath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('labelsText').value = j.content; document.getElementById('labelsStatus').textContent = 'Loaded'; } else { document.getElementById('labelsStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
+    async function saveLabels() { try { const p = document.getElementById('labelsPath').value || '/app/configs/labels.txt'; const content = document.getElementById('labelsText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('labelsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
   </script>
 </body>
 </html>
