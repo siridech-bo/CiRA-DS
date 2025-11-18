@@ -176,24 +176,58 @@ app.post("/api/hls/start", async (req, res) => {
   if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {}
   }
   const baseSink = `hlssink max-files=5 target-duration=2 playlist-location=${target} location=/app/public/video/out_%05d.ts`;
-  const cmds = [];
-  if (isRtsp) {
-    cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
-    cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
-  } else {
-    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
-    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
-    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! matroskademux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
-  }
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let ok = false, used = "";
-  for (const c of cmds) {
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+  const ffimg = "jrottenberg/ffmpeg:4.4-alpine";
+  const ffCmd = isRtsp
+    ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target]
+    : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target];
+  await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+  let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
+  if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+    await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(ffimg)}`);
     await dockerRequest("DELETE", "/containers/ds_hls?force=true");
-    const created = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
-    if (created.statusCode < 200 || created.statusCode >= 300) continue;
+    created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
+  }
+  if (created.statusCode >= 200 && created.statusCode < 300) {
     const start = await dockerRequest("POST", "/containers/ds_hls/start");
-    if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = c; break; }
+    if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
+  }
+  if (!ok) {
+    const cmds = [];
+    if (isRtsp) {
+      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
+    } else {
+      cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! matroskademux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+    }
+    for (const c of cmds) {
+      const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+      await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+      const created2 = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
+      if (created2.statusCode < 200 || created2.statusCode >= 300) continue;
+      const start2 = await dockerRequest("POST", "/containers/ds_hls/start");
+      if (start2.statusCode >= 200 && start2.statusCode < 300) { ok = true; used = c; break; }
+    }
+  }
+  if (!ok) {
+    const ffimg = "jrottenberg/ffmpeg:4.4-alpine";
+    const ffCmd = isRtsp
+      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target]
+      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target];
+    await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+    let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(ffimg)}`);
+      await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+      created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
+    }
+    if (created.statusCode >= 200 && created.statusCode < 300) {
+      const start = await dockerRequest("POST", "/containers/ds_hls/start");
+      if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
+    }
   }
   if (!ok) return res.status(500).json({ error: "failed to start hls" });
   res.json({ ok: true, pipeline: used, playlist: "/video/out.m3u8" });
