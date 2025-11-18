@@ -294,7 +294,7 @@ app.post("/api/dsapp/start", async (req, res) => {
   }
   const cmd = buildSampleCmd(sample, uris);
   await dockerRequest("DELETE", "/containers/ds_app?force=true");
-  const binds = ["/tmp/.X11-unix:/tmp/.X11-unix"];
+  const binds = ["/tmp/.X11-unix:/tmp/.X11-unix", "/data/ds/configs:/app/configs", "/data/ds/configs:/data/ds/configs"];
   const env = [
     `DISPLAY=${process.env.DISPLAY || ":0"}`,
     "CUDA_VER=10.2",
