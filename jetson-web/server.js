@@ -178,7 +178,7 @@ app.post("/api/hls/start", async (req, res) => {
   const baseSink = `hlssink max-files=5 target-duration=2 playlist-location=${target} location=/app/public/video/out_%05d.ts`;
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let ok = false, used = "";
-  const ffimg = "jrottenberg/ffmpeg:4.4-alpine";
+  const ffimg = "lscr.io/linuxserver/ffmpeg:latest";
   const ffCmd = isRtsp
     ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target]
     : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target];
