@@ -166,6 +166,50 @@ app.delete("/api/snapshot/clear", async (_req, res) => {
   }
 });
 
+app.post("/api/hls/start", async (req, res) => {
+  let uri = (req.body && req.body.uri) || "";
+  const target = "/app/public/video/out.m3u8";
+  if (!uri) return res.status(400).json({ error: "uri required" });
+  if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
+  const isRtsp = uri.startsWith("rtsp://");
+  const binds = ["/data/hls:/app/public/video"];
+  if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {}
+  }
+  const baseSink = `hlssink max-files=5 target-duration=2 playlist-location=${target} location=/app/public/video/out_%05d.ts`;
+  const cmds = [];
+  if (isRtsp) {
+    cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+    cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
+  } else {
+    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
+    cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! matroskademux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+  }
+  await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+  let ok = false, used = "";
+  for (const c of cmds) {
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+    const created = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
+    if (created.statusCode < 200 || created.statusCode >= 300) continue;
+    const start = await dockerRequest("POST", "/containers/ds_hls/start");
+    if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = c; break; }
+  }
+  if (!ok) return res.status(500).json({ error: "failed to start hls" });
+  res.json({ ok: true, pipeline: used, playlist: "/video/out.m3u8" });
+});
+
+app.post("/api/hls/stop", async (_req, res) => {
+  await dockerRequest("POST", "/containers/ds_hls/stop");
+  await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+  res.json({ ok: true });
+});
+
+app.get("/api/hls/logs", async (_req, res) => {
+  const logs = await dockerRequest("GET", "/containers/ds_hls/logs?stdout=1&stderr=1&tail=200");
+  res.type("text/plain").send(logs.body || "");
+});
+
 function toNumber(v) { try { return Number(v) || 0; } catch { return 0; } }
 
 app.get("/api/local-health", async (_req, res) => {

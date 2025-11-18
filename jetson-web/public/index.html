@@ -118,8 +118,12 @@
       <input id="hlsUrl" placeholder="/video/stream.m3u8 or /media/bird.mp4" />
       <div class="row">
         <button onclick="playHls()">Play</button>
+        <button onclick="startHls()">Start HLS</button>
+        <button onclick="stopHls()">Stop HLS</button>
+        <button onclick="logsHls()">Logs</button>
       </div>
       <video id="video" playsinline controls muted></video>
+      <div class="status" id="hlsStatus"></div>
     </div>
     <div class="card">
       <h2>Control</h2>
@@ -304,6 +308,9 @@
     async function loadIni() { try { const p = document.getElementById('iniPath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('iniText').value = j.content; document.getElementById('iniStatus').textContent = 'Loaded'; } else { document.getElementById('iniStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     async function saveIni() { try { const p = document.getElementById('iniPath').value || ''; const content = document.getElementById('iniText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     async function runIni() { const p = document.getElementById('iniPath').value || ''; const image = document.getElementById('dsImage').value || ''; const autoEngine = !!document.getElementById('dsAutoEngine').checked; try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample: 'app_custom_ini', uris: [p], image, autoEngine }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
+    async function startHls() { let uri = document.getElementById('streamUri').value || ''; if (!uri) { uri = document.getElementById('hlsUrl').value || ''; } try { const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri }) }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); if (j.playlist) { document.getElementById('hlsUrl').value = j.playlist; playHls(); } } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
+    async function stopHls() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
+    async function logsHls() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsStatus').textContent = t; } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
   </script>
 </body>
 </html>
