@@ -203,11 +203,13 @@
     <div class="card">
       <h2>DeepStream Samples</h2>
       <select id="dsSample"></select>
+      <select id="dsIniList" size="6" style="width:100%" onchange="selectDsIniFromList()"></select>
       <textarea id="dsUris" rows="3" placeholder="Optional file paths. For Custom INI, put absolute /app/configs/... on first line"></textarea>
       <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="dsAutoEngine" /> Auto-build engine (remove model-engine-file)</label>
       <input id="dsImage" placeholder="Optional image override (e.g., siridech/deepstream-l4t:6.0.1-triton-prebuilt)" />
       <div class="row">
         <button onclick="loadSamples()">List</button>
+        <button onclick="listDsIni()">List INIs</button>
         <button onclick="startDsApp()">Run</button>
         <button onclick="stopDsApp()">Stop</button>
         <button onclick="logsDsApp()">Logs</button>
@@ -221,11 +223,17 @@
       <textarea id="iniText" rows="12" style="width:100%;height:240px" placeholder="Paste INI content here"></textarea>
       <select id="iniList" size="6" style="width:100%" onchange="selectIniFromList()"></select>
       <div class="row">
+        <label style="flex:1">Text size <input id="osdTextSize" type="range" min="10" max="48" value="26" /></label>
+        <label style="flex:1">BG opacity <input id="osdBgOpacity" type="range" min="0" max="255" value="160" /></label>
+        <label style="flex:1">Confidence <input id="osdThreshold" type="number" step="0.05" min="0" max="1" value="0.5" /></label>
+      </div>
+      <div class="row">
         <button onclick="listIni()">List</button>
         <button onclick="loadIni()">Load</button>
         <button onclick="saveIni()">Save</button>
         <button onclick="runIni()">Run</button>
         <button onclick="patchIniLabels()">Patch Labels</button>
+        <button onclick="patchOsdSettings()">Apply OSD</button>
       </div>
       <div class="status" id="iniStatus"></div>
     </div>
@@ -396,6 +404,103 @@
         document.getElementById('iniStatus').textContent = e.message;
       }
     }
+    async function patchOsdSettings() {
+      const textSize = Number(document.getElementById('osdTextSize').value || 26);
+      const bgOpacity = Number(document.getElementById('osdBgOpacity').value || 160);
+      const threshold = Number(document.getElementById('osdThreshold').value || 0.5);
+      let txt = document.getElementById('iniText').value || '';
+      let lines = txt.split(/\r?\n/);
+      let patched = [];
+      let inOsd = false;
+      let sawOsd = false;
+      let sawEnable = false, sawDisplay = false, sawTextSize = false, sawBg = false;
+      let osdHeaderIndex = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const s = l.trim();
+        if (s.startsWith('[') && s.endsWith(']')) {
+          inOsd = /\[\s*osd\s*\]/i.test(s);
+          if (inOsd) { sawOsd = true; osdHeaderIndex = patched.length; }
+          patched.push(l);
+          continue;
+        }
+        if (inOsd) {
+          if (/^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
+          if (/^\s*display-text\s*=\s*/i.test(s)) { patched.push('display-text=1'); sawDisplay = true; continue; }
+          if (/^\s*text-size\s*=\s*/i.test(s)) { patched.push('text-size=' + textSize); sawTextSize = true; continue; }
+          if (/^\s*text-bg-color\s*=\s*/i.test(s)) { patched.push(`text-bg-color=0;0;0;${bgOpacity}`); sawBg = true; continue; }
+        }
+        patched.push(l);
+      }
+      if (!sawOsd) {
+        patched.push('[osd]');
+        patched.push('enable=1');
+        patched.push('display-text=1');
+        patched.push('text-size=' + textSize);
+        patched.push('text-bg-color=0;0;0;' + bgOpacity);
+      } else {
+        const insertAt = osdHeaderIndex + 1;
+        const toInsert = [];
+        if (!sawEnable) toInsert.push('enable=1');
+        if (!sawDisplay) toInsert.push('display-text=1');
+        if (!sawTextSize) toInsert.push('text-size=' + textSize);
+        if (!sawBg) toInsert.push('text-bg-color=0;0;0;' + bgOpacity);
+        if (toInsert.length) {
+          patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt));
+        }
+      }
+      const newTxt = patched.join('\n');
+      document.getElementById('iniText').value = newTxt;
+      try {
+        let ptxt = '';
+        try {
+          const r1 = await fetch('/api/configs/read?path=' + encodeURIComponent('/app/configs/pgie_primary.txt'));
+          const j1 = await r1.json();
+          if (j1.content !== undefined) { ptxt = j1.content; }
+        } catch {}
+        if (!ptxt) {
+          ptxt = [
+            '[property]',
+            'gpu-id=0',
+            'network-type=0',
+            'model-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.caffemodel',
+            'proto-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.prototxt',
+            'batch-size=1',
+            'interval=0',
+            'gie-unique-id=1',
+            'maintain-aspect-ratio=1',
+            'labelfile-path=/app/configs/labels.txt'
+          ].join('\n');
+        }
+        let plines = ptxt.split(/\r?\n/);
+        let ppatched = [];
+        let inProp = false; let sawProp = false; let sawThreshold = false; let propHeaderIndex = -1;
+        for (let i = 0; i < plines.length; i++) {
+          const l = plines[i];
+          const s = l.trim();
+          if (s.startsWith('[') && s.endsWith(']')) {
+            inProp = /\[\s*property\s*\]/i.test(s);
+            if (inProp) { sawProp = true; propHeaderIndex = ppatched.length; }
+            ppatched.push(l);
+            continue;
+          }
+          if (inProp && /^\s*threshold\s*=\s*/i.test(s)) { ppatched.push('threshold=' + threshold); sawThreshold = true; continue; }
+          ppatched.push(l);
+        }
+        if (!sawProp) { ppatched.push('[property]'); propHeaderIndex = ppatched.length - 1; }
+        if (!sawThreshold) {
+          const insertAt2 = propHeaderIndex + 1;
+          ppatched = ppatched.slice(0, insertAt2).concat(['threshold=' + threshold]).concat(ppatched.slice(insertAt2));
+        }
+        const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: ppatched.join('\n') }) });
+        const saveJ = await saveR.json();
+        document.getElementById('iniStatus').textContent = 'OSD applied. PGIE threshold: ' + JSON.stringify(saveJ);
+      } catch (e) {
+        document.getElementById('iniStatus').textContent = e.message;
+      }
+    }
+    async function listDsIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('dsIniList'); sel.innerHTML = ''; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.replace('/app/configs/',''); sel.appendChild(o); }); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
+    function selectDsIniFromList() { const sel = document.getElementById('dsIniList'); const p = sel.value || ''; const text = document.getElementById('dsUris').value || ''; const lines = text.split(/\r?\n/); lines[0] = p; document.getElementById('dsUris').value = lines.join('\n'); }
     async function loadLabels() { try { const p = document.getElementById('labelsPath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('labelsText').value = j.content; document.getElementById('labelsStatus').textContent = 'Loaded'; } else { document.getElementById('labelsStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
     async function saveLabels() { try { const p = document.getElementById('labelsPath').value || '/app/configs/labels.txt'; const content = document.getElementById('labelsText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('labelsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
   </script>
