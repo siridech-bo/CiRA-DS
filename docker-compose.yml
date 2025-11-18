@@ -12,6 +12,7 @@ services:
     volumes:
       - /data/hls:/app/public/video
       - /data/videos:/app/public/media
+      - /data/ds/configs:/app/configs
       - ./jetson-web/server.js:/app/server.js
       - ./jetson-web/public/index.html:/app/public/index.html
       - /var/run/docker.sock:/var/run/docker.sock

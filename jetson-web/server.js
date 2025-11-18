@@ -231,6 +231,15 @@ function buildSampleCmd(sample, uris) {
   if (sample === "app_source30") {
     return `cd ${base}/samples/configs/deepstream-app && (deepstream-app -c source30_1080p_dec_infer-resnet_tiled_display_int8.txt || deepstream-app -c source30_1080p_dec_infer-resnet_tiled_display_fp16.txt)`;
   }
+  if (sample === "app_custom_ini") {
+    const ini = Array.isArray(uris) && uris.length ? uris[0] : "";
+    if (ini.startsWith("/app/configs/")) {
+      const dir = path.dirname(ini);
+      const file = path.basename(ini);
+      return `cd ${dir} && deepstream-app -c ${file}`;
+    }
+    return `deepstream-app -c ${ini}`;
+  }
   const bin = bins[sample] || bins.test1;
   const args = Array.isArray(uris) && uris.length ? uris.map(u => u.startsWith("file://") ? u.replace(/^file:\/\//, "") : u) : [streams.h264];
   const dir = path.dirname(bin);
@@ -246,7 +255,8 @@ app.get("/api/dsapp/samples", (_req, res) => {
     { id: "test5", label: "Test5 Analytics" },
     { id: "testsr", label: "Smart Record" },
     { id: "app_source1", label: "deepstream-app Source1" },
-    { id: "app_source30", label: "deepstream-app Source30 Tiled" }
+    { id: "app_source30", label: "deepstream-app Source30 Tiled" },
+    { id: "app_custom_ini", label: "deepstream-app Custom INI" }
   ]});
 });
 
@@ -254,6 +264,34 @@ app.post("/api/dsapp/start", async (req, res) => {
   const sample = (req.body && req.body.sample) || "test1";
   const uris = (req.body && req.body.uris) || [];
   const image = (req.body && req.body.image) || DS_APP_IMAGE;
+  const autoEngine = !!(req.body && req.body.autoEngine);
+  if (sample === "app_custom_ini" && autoEngine) {
+    try {
+      const ini = Array.isArray(uris) && uris.length ? uris[0] : "";
+      if (ini && ini.startsWith("/app/configs/")) {
+        const hostIni = ini.replace("/app/configs/", "/data/ds/configs/");
+        const txt = await fs.promises.readFile(hostIni, "utf8");
+        let primaryCfgPath = "";
+        const lines = txt.split(/\r?\n/);
+        let inPrimary = false;
+        for (const l of lines) {
+          const s = l.trim();
+          if (s.startsWith("[") && s.endsWith("]")) { inPrimary = s.toLowerCase() === "[primary-gie]"; continue; }
+          if (inPrimary && s.toLowerCase().startsWith("config-file=")) { primaryCfgPath = s.split("=").slice(1).join("=").trim(); break; }
+        }
+        if (primaryCfgPath) {
+          const resolved = primaryCfgPath.startsWith("/") ? primaryCfgPath.replace("/app/configs/", "/data/ds/configs/") : path.join(path.dirname(hostIni), primaryCfgPath);
+          try {
+            let cfg = await fs.promises.readFile(resolved, "utf8");
+            const hasEngine = /\n\s*model-engine-file\s*=\s*/i.test("\n"+cfg);
+            cfg = cfg.split(/\r?\n/).filter(line => !/^\s*model-engine-file\s*=/i.test(line)).join("\n");
+            if (!/\n\s*network-mode\s*=\s*/i.test("\n"+cfg)) { cfg += "\nnetwork-mode=1\n"; }
+            if (hasEngine) { await fs.promises.writeFile(resolved, cfg, "utf8"); }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
   const cmd = buildSampleCmd(sample, uris);
   await dockerRequest("DELETE", "/containers/ds_app?force=true");
   const binds = ["/tmp/.X11-unix:/tmp/.X11-unix"];
