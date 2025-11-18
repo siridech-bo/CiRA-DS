@@ -328,3 +328,27 @@ app.get("/api/dsapp/logs", async (_req, res) => {
   const logs = await dockerRequest("GET", "/containers/ds_app/logs?stdout=1&stderr=1&tail=200");
   res.type("text/plain").send(logs.body || "");
 });
+
+app.get("/api/configs/read", async (req, res) => {
+  try {
+    const p = String(req.query.path || "");
+    if (!p || !p.startsWith("/app/configs/") || p.includes("..")) return res.status(400).json({ error: "invalid path" });
+    const t = await fs.promises.readFile(p, "utf8");
+    res.json({ path: p, content: t });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/configs/save", async (req, res) => {
+  try {
+    const p = String((req.body && req.body.path) || "");
+    const c = String((req.body && req.body.content) || "");
+    if (!p || !p.startsWith("/app/configs/") || p.includes("..")) return res.status(400).json({ error: "invalid path" });
+    await fs.promises.mkdir(path.dirname(p), { recursive: true });
+    await fs.promises.writeFile(p, c, "utf8");
+    res.json({ ok: true, path: p, bytes: Buffer.byteLength(c) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
