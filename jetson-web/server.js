@@ -152,6 +152,37 @@ app.post("/api/snapshot/start", async (req, res) => {
     const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
     if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = c; break; }
   }
+  // If started but no images produced shortly, fallback to ffmpeg snapshot
+  if (ok) {
+    try {
+      await new Promise(r => setTimeout(r, 1500));
+      const files = await fs.promises.readdir(SNAP_DIR);
+      const count = files.filter(f => f.toLowerCase().endsWith(".jpg")).length;
+      if (count === 0) {
+        await dockerRequest("POST", "/containers/ds_snapshot/stop");
+        await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+        ok = false; used = "";
+      }
+    } catch {}
+  }
+  if (!ok) {
+    const ffimg = "lscr.io/linuxserver/ffmpeg:latest";
+    const ffCmd = isRtsp
+      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-vf", `fps=${Math.max(1, rate)}`, "-q:v","2", path.join(SNAP_DIR, "snap_%05d.jpg")]
+      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-vf", `fps=${Math.max(1, rate)}`, "-q:v","2", path.join(SNAP_DIR, "snap_%05d.jpg")];
+    await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+    const ffBinds = [...binds];
+    let created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: ffBinds } });
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(ffimg)}`);
+      await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
+      created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: ffBinds } });
+    }
+    if (created.statusCode >= 200 && created.statusCode < 300) {
+      const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
+      if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
+    }
+  }
   if (!ok) return res.status(500).json({ error: "failed to start snapshot" });
   res.json({ ok: true, pipeline: used });
 });
