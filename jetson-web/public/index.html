@@ -234,7 +234,9 @@
       <h2>Snapshot</h2>
       <input id="snapUri" placeholder="rtsp://... or /data/videos/file.mp4" />
       <input id="snapRate" type="number" placeholder="rate per second" />
+      <select id="mediaList" size="6" style="width:100%" onchange="selectMediaFile()"></select>
       <div class="row">
+        <button onclick="listMedia()">List Media</button>
         <button onclick="useVideoForSnap()">Use Video</button>
         <button onclick="startSnap()">Start</button>
         <button onclick="stopSnap()">Stop</button>
@@ -242,6 +244,7 @@
         <button onclick="loadSnapLogs()">Logs</button>
       </div>
       <div class="status" id="snapStatus"></div>
+      <div class="status" id="snapCount"></div>
       <div id="snapViewer" style="display:flex;flex-direction:column;gap:8px;align-items:center;">
         <img id="snapImage" style="max-width:100%;height:auto;object-fit:contain" />
         <div class="row" style="width:100%">
@@ -267,6 +270,7 @@
       try {
         const r = await fetch('/api/snapshot/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, rate }) });
         const j = await r.json(); document.getElementById('snapStatus').textContent = JSON.stringify(j);
+        try { const c = (typeof j.count === 'number') ? j.count : 0; document.getElementById('snapCount').textContent = 'Images: ' + c; } catch {}
         await loadSnapImages(false);
         if (window.snapTimer) clearInterval(window.snapTimer);
         window.snapTimer = setInterval(async () => { await loadSnapImages(false); await localHealth(); }, 3000);
@@ -302,12 +306,15 @@
         document.getElementById('snapStatus').textContent = JSON.stringify(j);
         window.snapFiles = [];
         window.snapIndex = 0;
+        try { document.getElementById('snapCount').textContent = 'Images: 0'; } catch {}
         renderSnap();
         await loadSnapImages(true);
       } catch (e) {
         document.getElementById('snapStatus').textContent = e.message;
       }
     }
+    async function listMedia() { try { const r = await fetch('/api/media/list'); const j = await r.json(); const sel = document.getElementById('mediaList'); sel.innerHTML=''; if (j && Array.isArray(j.files)) { (j.files||[]).forEach(p => { const o=document.createElement('option'); o.value=p; o.textContent=p.replace('/media/',''); sel.appendChild(o); }); } else { document.getElementById('snapStatus').textContent = (j && j.error) ? j.error : 'No media found'; } } catch (e) { document.getElementById('snapStatus').textContent = e.message; } }
+    function selectMediaFile() { const sel=document.getElementById('mediaList'); const p=sel.value||''; document.getElementById('snapUri').value = p; }
     async function loadSnapImages(limitAll) {
       try {
         const r = await fetch('/api/snapshot/list' + (limitAll ? '?limit=100000' : ''));
@@ -315,6 +322,7 @@
         const files = j.files || [];
         const prevLen = (window.snapFiles && window.snapFiles.length) || 0;
         window.snapFiles = files;
+        try { document.getElementById('snapCount').textContent = 'Images: ' + files.length; } catch {}
         if (files.length === 0) { window.snapIndex = 0; renderSnap(); return; }
         if (prevLen === 0) { window.snapIndex = files.length - 1; } else { if (window.snapIndex >= files.length) window.snapIndex = files.length - 1; }
         renderSnap();

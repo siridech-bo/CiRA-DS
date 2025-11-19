@@ -120,6 +120,7 @@ function dockerRequest(method, path, body) {
 const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "nvcr.io/nvidia/deepstream-l4t:6.0.1-samples";
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
+const MEDIA_DIR = process.env.MEDIA_DIR || "/data/videos";
 app.use("/snapshots", express.static(SNAP_DIR));
 
 app.post("/api/snapshot/start", async (req, res) => {
@@ -316,6 +317,32 @@ app.get("/api/snapshot/list", async (req, res) => {
     res.json({ files: stats.slice(0, limit).map(x => x.f) });
   } catch (e) {
     res.json({ files: [] });
+  }
+});
+
+app.get("/api/media/list", async (_req, res) => {
+  try {
+    const exts = new Set([".mp4", ".mkv", ".avi", ".mov", ".ts", ".h264", ".h265", ".webm"]);
+    async function walk(p, depth, out) {
+      const ents = await fs.promises.readdir(p, { withFileTypes: true });
+      for (const e of ents) {
+        const full = path.join(p, e.name);
+        if (e.isDirectory()) { if (depth < 3) { await walk(full, depth + 1, out); } }
+        else {
+          const ext = (path.extname(full) || "").toLowerCase();
+          if (exts.has(ext)) {
+            const rel = path.relative(MEDIA_DIR, full).split(path.sep).join("/");
+            out.push("/media/" + rel);
+          }
+        }
+      }
+    }
+    const out = [];
+    await walk(MEDIA_DIR, 0, out);
+    out.sort();
+    res.json({ dir: "/media/", files: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message, files: [] });
   }
 });
 
