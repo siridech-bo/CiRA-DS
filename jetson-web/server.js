@@ -133,12 +133,14 @@ app.post("/api/snapshot/start", async (req, res) => {
   const cmds = [];
   if (isRtsp) {
     cmds.push(`gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+    cmds.push(`gst-launch-1.0 rtspsrc location='${uri}' latency=200 ! rtph265depay ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
   } else {
     cmds.push(`gst-launch-1.0 -vv playbin uri='file://${uri}' video-sink=\"videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg\" audio-sink=fakesink`);
     cmds.push(`gst-launch-1.0 uridecodebin uri='file://${uri}' ! videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! videoconvert ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
     cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! qtdemux ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! jpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
+    cmds.push(`gst-launch-1.0 filesrc location='${uri}' ! decodebin ! nvvidconv ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=${rate} ! nvjpegenc ! multifilesink location=${SNAP_DIR}/snap_%05d.jpg`);
   }
   await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
   const binds = [`${SNAP_DIR}:${SNAP_DIR}`];
@@ -165,26 +167,10 @@ app.post("/api/snapshot/start", async (req, res) => {
       }
     } catch {}
   }
-  if (!ok) {
-    const ffimg = "lscr.io/linuxserver/ffmpeg:latest";
-    const ffCmd = isRtsp
-      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-vf", `fps=${Math.max(1, rate)}`, "-q:v","2", path.join(SNAP_DIR, "snap_%05d.jpg")]
-      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-vf", `fps=${Math.max(1, rate)}`, "-q:v","2", path.join(SNAP_DIR, "snap_%05d.jpg")];
-    await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
-    const ffBinds = [...binds];
-    let created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: ffBinds } });
-    if (!(created.statusCode >= 200 && created.statusCode < 300)) {
-      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(ffimg)}`);
-      await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
-      created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: ffBinds } });
-    }
-    if (created.statusCode >= 200 && created.statusCode < 300) {
-      const start = await dockerRequest("POST", "/containers/ds_snapshot/start");
-      if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
-    }
-  }
   if (!ok) return res.status(500).json({ error: "failed to start snapshot" });
-  res.json({ ok: true, pipeline: used });
+  let count = 0;
+  try { const files = await fs.promises.readdir(SNAP_DIR); count = files.filter(f => f.toLowerCase().endsWith('.jpg')).length; } catch {}
+  res.json({ ok: true, pipeline: used, count });
 });
 
 app.get("/api/snapshot/logs", async (_req, res) => {
