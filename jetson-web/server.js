@@ -203,6 +203,8 @@ app.delete("/api/snapshot/clear", async (_req, res) => {
 
 app.post("/api/hls/start", async (req, res) => {
   let uri = (req.body && req.body.uri) || "";
+  const hlsTime = Number((req.body && req.body.hls_time) || 2);
+  const hlsListSize = Number((req.body && req.body.hls_list_size) || 5);
   const target = "/app/public/video/out.m3u8";
   if (!uri) return res.status(400).json({ error: "uri required" });
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
@@ -210,13 +212,13 @@ app.post("/api/hls/start", async (req, res) => {
   const binds = ["/data/hls:/app/public/video"];
   if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {}
   }
-  const baseSink = `hlssink max-files=5 target-duration=2 playlist-location=${target} location=/app/public/video/out_%05d.ts`;
+  const baseSink = `hlssink max-files=${Math.max(1,hlsListSize)} target-duration=${Math.max(1,hlsTime)} playlist-location=${target} location=/app/public/video/out_%05d.ts`;
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let ok = false, used = "";
   const ffimg = "lscr.io/linuxserver/ffmpeg:latest";
   const ffCmd = isRtsp
-    ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target]
-    : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target];
+    ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
+    : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
   if (!(created.statusCode >= 200 && created.statusCode < 300)) {
@@ -250,8 +252,8 @@ app.post("/api/hls/start", async (req, res) => {
   if (!ok) {
     const ffimg = "jrottenberg/ffmpeg:4.4-alpine";
     const ffCmd = isRtsp
-      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target]
-      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments", target];
+      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
+      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
     await dockerRequest("DELETE", "/containers/ds_hls?force=true");
     let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
     if (!(created.statusCode >= 200 && created.statusCode < 300)) {
@@ -276,6 +278,36 @@ app.post("/api/hls/stop", async (_req, res) => {
 
 app.get("/api/hls/logs", async (_req, res) => {
   const logs = await dockerRequest("GET", "/containers/ds_hls/logs?stdout=1&stderr=1&tail=200");
+  res.type("text/plain").send(logs.body || "");
+});
+
+app.post("/api/rtsp/start", async (_req, res) => {
+  const image = process.env.RTSP_IMAGE || "bluenviron/mediamtx:latest";
+  await dockerRequest("DELETE", "/containers/rtsp_server?force=true");
+  const body = { Image: image, HostConfig: { NetworkMode: "host" } };
+  let created = await dockerRequest("POST", "/containers/create?name=rtsp_server", body);
+  if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+    await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(image)}`);
+    await dockerRequest("DELETE", "/containers/rtsp_server?force=true");
+    created = await dockerRequest("POST", "/containers/create?name=rtsp_server", body);
+  }
+  if (created.statusCode >= 200 && created.statusCode < 300) {
+    const start = await dockerRequest("POST", "/containers/rtsp_server/start");
+    if (start.statusCode >= 200 && start.statusCode < 300) {
+      return res.json({ ok: true, uri: "rtsp://127.0.0.1:8554/ds-test" });
+    }
+  }
+  res.status(500).json({ ok: false });
+});
+
+app.post("/api/rtsp/stop", async (_req, res) => {
+  await dockerRequest("POST", "/containers/rtsp_server/stop");
+  await dockerRequest("DELETE", "/containers/rtsp_server?force=true");
+  res.json({ ok: true });
+});
+
+app.get("/api/rtsp/logs", async (_req, res) => {
+  const logs = await dockerRequest("GET", "/containers/rtsp_server/logs?stdout=1&stderr=1&tail=200");
   res.type("text/plain").send(logs.body || "");
 });
 
@@ -350,6 +382,28 @@ app.get("/api/media/list", async (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, files: [] });
   }
+});
+
+app.get("/api/admin/env", (_req, res) => {
+  res.json({
+    isJetson: isJetsonHost(),
+    PORT,
+    DEEPSTREAM_URL,
+    CONFIGS_DIR,
+    JETSON_ONLY,
+    MEDIA_DIR,
+    DS_IMAGE
+  });
+});
+
+app.get("/api/admin/containers", async (_req, res) => {
+  const names = ["ds_app","ds_hls","ds_snapshot","rtsp_server"];
+  const out = {};
+  for (const n of names) {
+    const info = await dockerRequest("GET", `/containers/${n}/json`);
+    try { out[n] = JSON.parse(info.body).State || null; } catch { out[n] = null; }
+  }
+  res.json(out);
 });
 
 app.listen(PORT, () => {

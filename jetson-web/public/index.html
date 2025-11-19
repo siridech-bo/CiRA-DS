@@ -108,7 +108,7 @@
         document.getElementById('localHealth').textContent = e.message;
       }
     }
-    function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
+    function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-output','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
   </script>
@@ -117,7 +117,52 @@
   <div class="row" id="tabbar">
     <button onclick="setTab('input')">Input</button>
     <button onclick="setTab('pipeline')">Process Pipeline</button>
+    <button onclick="setTab('output')">Output</button>
     <button onclick="setTab('utility')">Utility</button>
+  </div>
+  <div class="grid" id="tab-output" style="display:none">
+    <div class="card">
+      <h2>HLS Output</h2>
+      <input id="hlsPlayUrl" placeholder="/video/out.m3u8" value="/video/out.m3u8" />
+      <div class="row">
+        <button onclick="playHlsOut()">Play</button>
+      </div>
+      <video id="videoOut" playsinline controls muted></video>
+      <div class="row">
+        <input id="hlsTime" type="number" placeholder="segment seconds" value="2" />
+        <input id="hlsListSize" type="number" placeholder="list size" value="5" />
+        <button onclick="startHlsWithParams()">Start HLS</button>
+        <button onclick="stopHls()">Stop</button>
+        <button onclick="logsHlsOut()">Logs</button>
+      </div>
+      <div class="status" id="hlsOutStatus"></div>
+    </div>
+    <div class="card">
+      <h2>RTSP Server</h2>
+      <div class="row">
+        <button onclick="startRtsp()">Start RTSP Server</button>
+        <button onclick="stopRtsp()">Stop</button>
+        <button onclick="logsRtsp()">Logs</button>
+      </div>
+      <div class="status" id="rtspStatus"></div>
+      <div class="status">Default: rtsp://127.0.0.1:8554/ds-test</div>
+    </div>
+    <div class="card">
+      <h2>JSON Output</h2>
+      <div class="row">
+        <button onclick="refreshJsonLogs()">Refresh</button>
+      </div>
+      <div class="status" id="jsonLogs" style="white-space:pre-wrap"></div>
+    </div>
+    <div class="card">
+      <h2>Admin</h2>
+      <div class="row">
+        <button onclick="loadAdminEnv()">Env</button>
+        <button onclick="loadAdminContainers()">Containers</button>
+      </div>
+      <div class="status" id="adminEnv"></div>
+      <div class="status" id="adminContainers"></div>
+    </div>
   </div>
   <div class="grid" id="tab-input">
     <div class="card">
@@ -195,6 +240,8 @@
         <label style="flex:1">Text size <input id="osdTextSize" type="range" min="10" max="48" value="26" /></label>
         <label style="flex:1">BG opacity <input id="osdBgOpacity" type="range" min="0" max="255" value="160" /></label>
         <label style="flex:1">Confidence <input id="osdThreshold" type="number" step="0.05" min="0" max="1" value="0.5" /></label>
+        <label style="flex:1">Text color <input id="osdTextColor" type="color" value="#ffffff" /></label>
+        <label style="flex:1">Text alpha <input id="osdTextAlpha" type="range" min="0" max="255" value="255" /></label>
       </div>
       <div class="row">
         <button onclick="listIni()">List</button>
@@ -354,7 +401,7 @@
       let uri = document.getElementById('streamUri').value || '';
       if (!uri) { uri = document.getElementById('hlsUrl').value || ''; }
       try {
-        const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri }) });
+        const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri, hls_time: Number(document.getElementById('hlsTime') ? document.getElementById('hlsTime').value : 2), hls_list_size: Number(document.getElementById('hlsListSize') ? document.getElementById('hlsListSize').value : 5) }) });
         const j = await r.json();
         document.getElementById('hlsStatus').textContent = JSON.stringify(j);
         if (j.playlist) {
@@ -369,6 +416,15 @@
         }
       } catch (e) { document.getElementById('hlsStatus').textContent = e.message; }
     }
+    function playHlsOut() { const url = document.getElementById('hlsPlayUrl').value || '/video/out.m3u8'; const video = document.getElementById('videoOut'); const isM3U8 = url.toLowerCase().endsWith('.m3u8'); if (isM3U8 && window.Hls && Hls.isSupported()) { const h = new Hls(); h.loadSource(url); h.attachMedia(video); } else { video.src = url; } video.play(); }
+    async function startHlsWithParams() { try { const url = document.getElementById('hlsUrl').value || ''; const time = Number(document.getElementById('hlsTime').value || 2); const size = Number(document.getElementById('hlsListSize').value || 5); const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri: url, hls_time: time, hls_list_size: size }) }); const j = await r.json(); document.getElementById('hlsOutStatus').textContent = JSON.stringify(j); if (j.playlist) { document.getElementById('hlsPlayUrl').value = j.playlist; for (let i=0;i<20;i++){ try { const resp = await fetch(j.playlist, { cache: 'no-store' }); if (resp.ok){ playHlsOut(); break; } } catch{} await new Promise(res => setTimeout(res, 500)); } } } catch (e) { document.getElementById('hlsOutStatus').textContent = e.message; } }
+    async function logsHlsOut() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsOutStatus').textContent = t; } catch (e) { document.getElementById('hlsOutStatus').textContent = e.message; } }
+    async function startRtsp() { try { const r = await fetch('/api/rtsp/start', { method: 'POST' }); const j = await r.json(); document.getElementById('rtspStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
+    async function stopRtsp() { try { const r = await fetch('/api/rtsp/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('rtspStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
+    async function logsRtsp() { try { const r = await fetch('/api/rtsp/logs'); const t = await r.text(); document.getElementById('rtspStatus').textContent = t; } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
+    async function refreshJsonLogs() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const lines = t.split(/\r?\n/).filter(x => /\{.*\}/.test(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
+    async function loadAdminEnv() { try { const r = await fetch('/api/admin/env'); const j = await r.json(); document.getElementById('adminEnv').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminEnv').textContent = e.message; } }
+    async function loadAdminContainers() { try { const r = await fetch('/api/admin/containers'); const j = await r.json(); document.getElementById('adminContainers').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminContainers').textContent = e.message; } }
     async function stopHls() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function logsHls() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsStatus').textContent = t; } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function patchIniLabels() {
@@ -427,12 +483,15 @@
       const textSize = Number(document.getElementById('osdTextSize').value || 26);
       const bgOpacity = Number(document.getElementById('osdBgOpacity').value || 160);
       const threshold = Number(document.getElementById('osdThreshold').value || 0.5);
+      const colorHex = document.getElementById('osdTextColor').value || '#ffffff';
+      const alpha = Number(document.getElementById('osdTextAlpha').value || 255);
+      const r = parseInt(colorHex.slice(1,3),16), g = parseInt(colorHex.slice(3,5),16), b = parseInt(colorHex.slice(5,7),16);
       let txt = document.getElementById('iniText').value || '';
       let lines = txt.split(/\r?\n/);
       let patched = [];
       let inOsd = false;
       let sawOsd = false;
-      let sawEnable = false, sawDisplay = false, sawTextSize = false, sawBg = false;
+      let sawEnable = false, sawDisplay = false, sawTextSize = false, sawBg = false, sawColor = false;
       let osdHeaderIndex = -1;
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
@@ -448,6 +507,7 @@
           if (/^\s*display-text\s*=\s*/i.test(s)) { patched.push('display-text=1'); sawDisplay = true; continue; }
           if (/^\s*text-size\s*=\s*/i.test(s)) { patched.push('text-size=' + textSize); sawTextSize = true; continue; }
           if (/^\s*text-bg-color\s*=\s*/i.test(s)) { patched.push(`text-bg-color=0;0;0;${bgOpacity}`); sawBg = true; continue; }
+          if (/^\s*text-color\s*=\s*/i.test(s)) { patched.push(`text-color=${r};${g};${b};${alpha}`); sawColor = true; continue; }
         }
         patched.push(l);
       }
@@ -457,6 +517,7 @@
         patched.push('display-text=1');
         patched.push('text-size=' + textSize);
         patched.push('text-bg-color=0;0;0;' + bgOpacity);
+        patched.push(`text-color=${r};${g};${b};${alpha}`);
       } else {
         const insertAt = osdHeaderIndex + 1;
         const toInsert = [];
@@ -464,6 +525,7 @@
         if (!sawDisplay) toInsert.push('display-text=1');
         if (!sawTextSize) toInsert.push('text-size=' + textSize);
         if (!sawBg) toInsert.push('text-bg-color=0;0;0;' + bgOpacity);
+        if (!sawColor) toInsert.push(`text-color=${r};${g};${b};${alpha}`);
         if (toInsert.length) {
           patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt));
         }
