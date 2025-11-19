@@ -434,7 +434,16 @@
       if (!src) { document.getElementById('iniStatus').textContent = 'No source selected'; return; }
       let txt = document.getElementById('iniText').value || '';
       const isRtsp = /^rtsp:\/\//i.test(src);
-      const uriVal = isRtsp ? src : (src.startsWith('/media/') ? 'file:///data/videos/' + src.slice(7) : (src.startsWith('/') ? 'file://' + src : src));
+      let uriVal = src;
+      if (isRtsp) {
+        uriVal = src;
+      } else if (src.startsWith('/media/')) {
+        uriVal = 'file:///data/videos/' + src.slice(7);
+      } else if (src.startsWith('/video/')) {
+        uriVal = 'file:///app/public/video/' + src.slice(7);
+      } else if (src.startsWith('/')) {
+        uriVal = 'file://' + src;
+      }
       let lines = txt.split(/\r?\n/);
       let patched = [];
       let inSrc0 = false, sawSrc0 = false, sawEnable = false, sawType = false, sawUri = false;
@@ -553,7 +562,12 @@
         'interval=0',
         'gie-unique-id=1',
         'maintain-aspect-ratio=1',
-        'labelfile-path=/app/configs/labels.txt'
+        'labelfile-path=/app/configs/labels.txt',
+        'net-scale-factor=0.00392156862745098',
+        'parse-bbox-func-name=NvDsInferParseCustomBBox_Caffe',
+        'custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl/libnvdsinfer_custom_impl.so',
+        'num-detected-classes=4',
+        'cluster-mode=2'
       ].join('\n');
       try {
         const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: pgie }) });
@@ -634,27 +648,32 @@
             'interval=0',
             'gie-unique-id=1',
             'maintain-aspect-ratio=1',
-            'labelfile-path=/app/configs/labels.txt'
+            'labelfile-path=/app/configs/labels.txt',
+            'net-scale-factor=0.00392156862745098',
+            'parse-bbox-func-name=NvDsInferParseCustomBBox_Caffe',
+            'custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl/libnvdsinfer_custom_impl.so',
+            'num-detected-classes=4',
+            'cluster-mode=2'
           ].join('\n');
         }
         let plines = ptxt.split(/\r?\n/);
         let ppatched = [];
-        let inProp = false; let sawProp = false; let sawThreshold = false; let propHeaderIndex = -1;
+        let inClassAll = false; let sawClassAll = false; let sawThreshold = false; let classHeaderIndex = -1;
         for (let i = 0; i < plines.length; i++) {
           const l = plines[i];
           const s = l.trim();
           if (s.startsWith('[') && s.endsWith(']')) {
-            inProp = /\[\s*property\s*\]/i.test(s);
-            if (inProp) { sawProp = true; propHeaderIndex = ppatched.length; }
+            inClassAll = /\[\s*class-attrs-all\s*\]/i.test(s);
+            if (inClassAll) { sawClassAll = true; classHeaderIndex = ppatched.length; }
             ppatched.push(l);
             continue;
           }
-          if (inProp && /^\s*threshold\s*=\s*/i.test(s)) { ppatched.push('threshold=' + threshold); sawThreshold = true; continue; }
+          if (inClassAll && /^\s*threshold\s*=\s*/i.test(s)) { ppatched.push('threshold=' + threshold); sawThreshold = true; continue; }
           ppatched.push(l);
         }
-        if (!sawProp) { ppatched.push('[property]'); propHeaderIndex = ppatched.length - 1; }
+        if (!sawClassAll) { ppatched.push('[class-attrs-all]'); classHeaderIndex = ppatched.length - 1; }
         if (!sawThreshold) {
-          const insertAt2 = propHeaderIndex + 1;
+          const insertAt2 = classHeaderIndex + 1;
           ppatched = ppatched.slice(0, insertAt2).concat(['threshold=' + threshold]).concat(ppatched.slice(insertAt2));
         }
         const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: ppatched.join('\n') }) });
