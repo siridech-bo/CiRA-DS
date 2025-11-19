@@ -117,7 +117,7 @@
     function goToPipeline() { try { const uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; const id = deriveStreamId(uri); localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} setTab('pipeline'); try { const el = document.getElementById('iniPath'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); } catch{} }
     function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-output','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
-    window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); initEnv(); });
+    window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
   </script>
   </head>
 <body>
@@ -509,7 +509,6 @@
     async function loadAdminContainers() { try { const r = await fetch('/api/admin/containers'); const j = await r.json(); document.getElementById('adminContainers').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminContainers').textContent = e.message; } }
     async function stopHls() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function logsHls() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsStatus').textContent = t; } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
-    async function initEnv() { try { const r = await fetch('/api/admin/env'); const j = await r.json(); const show = !!(j && j.isJetson); const b1 = document.getElementById('btnClearHls'); const b2 = document.getElementById('btnClearHlsOut'); if (b1) { b1.style.display = show ? '' : 'none'; } if (b2) { b2.style.display = show ? '' : 'none'; } } catch {} }
     async function clearHls() { try { const r = await fetch('/api/hls/clear', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); try { const v = document.getElementById('video'); v.removeAttribute('src'); } catch {} } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function clearHlsOut() { try { const r = await fetch('/api/hls/clear', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsOutStatus').textContent = JSON.stringify(j); try { const v = document.getElementById('videoOut'); v.removeAttribute('src'); } catch {} } catch (e) { document.getElementById('hlsOutStatus').textContent = e.message; } }
     async function patchIniLabels() {
