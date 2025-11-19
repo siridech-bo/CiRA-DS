@@ -2,12 +2,30 @@ import express from "express";
 import axios from "axios";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
+import os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+function isJetsonHost() {
+  try {
+    if (process.env.JETSON_ONLY === "false") return true;
+    if (os.platform() !== "linux") return false;
+    if (fs.existsSync("/etc/nv_tegra_release")) return true;
+    try {
+      const m = fs.readFileSync("/proc/device-tree/model", "utf8").toLowerCase();
+      if (m.includes("jetson")) return true;
+    } catch {}
+  } catch {}
+  return false;
+}
+if (!isJetsonHost()) {
+  console.error("Jetson-only web UI: refusing to start on non-Jetson host");
+  process.exit(1);
+}
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";
 let messages = [];
 
@@ -77,9 +95,7 @@ app.delete("/api/message", (_req, res) => {
   res.json({ ok: true });
 });
 
-import fs from "fs";
 import http from "http";
-import os from "os";
 
 function dockerRequest(method, path, body) {
   return new Promise((resolve) => {
@@ -103,6 +119,7 @@ function dockerRequest(method, path, body) {
 
 const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "nvcr.io/nvidia/deepstream-l4t:6.0.1-samples";
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
+const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
 app.use("/snapshots", express.static(SNAP_DIR));
 
 app.post("/api/snapshot/start", async (req, res) => {
@@ -433,8 +450,14 @@ app.post("/api/configs/save", async (req, res) => {
 
 app.get("/api/configs/list", async (req, res) => {
   try {
-    const d = String(req.query.dir || "/app/configs/");
-    if (!d.startsWith("/app/configs/") || d.includes("..")) return res.status(400).json({ error: "invalid path" });
+    function pickExistingDir(pref) {
+      const candidates = [pref, "/app/configs/", "/data/ds/configs/"];
+      for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch {} }
+      return pref;
+    }
+    const base = pickExistingDir(CONFIGS_DIR);
+    let dirParam = String(req.query.dir || base);
+    if (!dirParam.startsWith(base) || dirParam.includes("..")) dirParam = base;
     const out = [];
     async function walk(p, depth) {
       const ents = await fs.promises.readdir(p, { withFileTypes: true });
@@ -444,9 +467,9 @@ app.get("/api/configs/list", async (req, res) => {
         else { const f = full.toLowerCase(); if (f.endsWith(".ini")) out.push(full); }
       }
     }
-    await walk(d, 0);
+    await walk(dirParam, 0);
     out.sort();
-    res.json({ dir: d, files: out });
+    res.json({ dir: dirParam, files: out });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
