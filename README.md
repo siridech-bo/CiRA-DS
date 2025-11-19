@@ -29,6 +29,26 @@ This repository provides a lightweight web server and UI that runs on Jetson (Na
 2. Start web UI:
    - `sudo docker compose up -d`
 
+### C. Direct Run on Jetson (docker run)
+Run the container directly on Jetson without Compose:
+
+```
+docker run -d --name jetson-web --restart always \
+   --network host \
+   -e PORT=80 \
+   -e DEEPSTREAM_URL=http://localhost:8080/api/v1 \
+   -e CONFIGS_DIR=/app/configs/ \
+   -v /var/run/docker.sock:/var/run/docker.sock \
+   -v /data/ds/configs:/app/configs \
+   -v /tmp/.X11-unix:/tmp/.X11-unix \
+   jetson-web
+```
+
+Notes:
+- The server exits if not running on Jetson to prevent accidental local runs.
+- `CONFIGS_DIR` should point to the mounted configs path `/app/configs/`.
+- `DEEPSTREAM_URL` points to DeepStream REST on the same Jetson.
+
 ## Configuration
 - `DEEPSTREAM_URL` default: `http://localhost:8080/api/v1`
   - Change in `docker-compose.yml` if DeepStream isn’t on host networking
