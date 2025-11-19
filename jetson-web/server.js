@@ -281,7 +281,8 @@ app.get("/api/hls/logs", async (_req, res) => {
   res.type("text/plain").send(logs.body || "");
 });
 app.post("/api/hls/clear", async (_req, res) => {
-  if (!isJetsonHost()) { return res.status(403).json({ error: "jetson-only" }); }
+  const IS_JETSON = String(process.env.IS_JETSON || "false").toLowerCase() === "true";
+  if (!(isJetsonHost() || IS_JETSON)) { return res.status(403).json({ error: "jetson-only" }); }
   try {
     await dockerRequest("POST", "/containers/ds_hls/stop");
     await dockerRequest("DELETE", "/containers/ds_hls?force=true");
@@ -413,6 +414,7 @@ app.get("/api/admin/env", (_req, res) => {
     DEEPSTREAM_URL,
     CONFIGS_DIR,
     JETSON_ONLY,
+    IS_JETSON: String(process.env.IS_JETSON || "false").toLowerCase() === "true",
     MEDIA_DIR,
     DS_IMAGE
   });
