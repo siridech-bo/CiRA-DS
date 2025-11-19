@@ -12,7 +12,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 function isJetsonHost() {
   try {
-    if (process.env.JETSON_ONLY === "false") return true;
     if (os.platform() !== "linux") return false;
     if (fs.existsSync("/etc/nv_tegra_release")) return true;
     try {
@@ -22,8 +21,9 @@ function isJetsonHost() {
   } catch {}
   return false;
 }
-if (!isJetsonHost()) {
-  console.error("Jetson-only web UI: refusing to start on non-Jetson host");
+const JETSON_ONLY = String(process.env.JETSON_ONLY || "false").toLowerCase() === "true";
+if (JETSON_ONLY && !isJetsonHost()) {
+  console.error("JETSON_ONLY=true: refusing to start on non-Jetson host");
   process.exit(1);
 }
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";

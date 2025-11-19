@@ -45,7 +45,7 @@ docker run -d --name jetson-web --restart always \
 ```
 
 Notes:
-- The server exits if not running on Jetson to prevent accidental local runs.
+- Optional gate: set `JETSON_ONLY=true` to refuse startup on non-Jetson hosts.
 - `CONFIGS_DIR` should point to the mounted configs path `/app/configs/`.
 - `DEEPSTREAM_URL` points to DeepStream REST on the same Jetson.
 
