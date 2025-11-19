@@ -280,6 +280,28 @@ app.get("/api/hls/logs", async (_req, res) => {
   const logs = await dockerRequest("GET", "/containers/ds_hls/logs?stdout=1&stderr=1&tail=200");
   res.type("text/plain").send(logs.body || "");
 });
+app.post("/api/hls/clear", async (_req, res) => {
+  if (!isJetsonHost()) { return res.status(403).json({ error: "jetson-only" }); }
+  try {
+    await dockerRequest("POST", "/containers/ds_hls/stop");
+    await dockerRequest("DELETE", "/containers/ds_hls?force=true");
+  } catch {}
+  try {
+    const dir = path.join(__dirname, "public", "video");
+    await fs.promises.mkdir(dir, { recursive: true });
+    const files = await fs.promises.readdir(dir);
+    let deleted = 0;
+    await Promise.all(files.map(async (f) => {
+      const low = f.toLowerCase();
+      if (low.endsWith(".m3u8") || low.endsWith(".ts")) {
+        try { await fs.promises.unlink(path.join(dir, f)); deleted++; } catch {}
+      }
+    }));
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.post("/api/rtsp/start", async (_req, res) => {
   const image = process.env.RTSP_IMAGE || "bluenviron/mediamtx:latest";
