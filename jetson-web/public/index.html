@@ -250,8 +250,14 @@
         <button onclick="runIni()">Run</button>
         <button onclick="patchIniLabels()">Patch Labels</button>
         <button onclick="patchOsdSettings()">Apply OSD</button>
+        <button onclick="bindSourceToIni()">Bind Source to INI</button>
+        <button onclick="finalizeConfig()">Finalize Configuration</button>
       </div>
       <div class="status" id="iniStatus"></div>
+      <h3>Rendered INI</h3>
+      <textarea id="iniPreview" rows="10" style="width:100%;height:200px" readonly></textarea>
+      <h3>Rendered PGIE</h3>
+      <textarea id="pgiePreview" rows="10" style="width:100%;height:200px" readonly></textarea>
     </div>
     <div class="card">
       <h2>Labels</h2>
@@ -397,6 +403,56 @@
     async function listIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('iniList'); sel.innerHTML = ''; if (j && Array.isArray(j.files)) { const prefix = (j && j.dir) || '/app/configs/'; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.startsWith(prefix) ? p.slice(prefix.length) : p.replace('/app/configs/',''); sel.appendChild(o); }); document.getElementById('iniStatus').textContent = 'Found ' + (j.files||[]).length + ' INIs'; } else { document.getElementById('iniStatus').textContent = (j && j.error) ? j.error : 'No INIs found'; } } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     function selectIniFromList() { const sel = document.getElementById('iniList'); const p = sel.value || ''; document.getElementById('iniPath').value = p; loadIni(); }
     async function runIni() { const p = document.getElementById('iniPath').value || ''; const image = document.getElementById('dsImage').value || ''; const autoEngine = !!document.getElementById('dsAutoEngine').checked; try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample: 'app_custom_ini', uris: [p], image, autoEngine }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
+    function bindSourceToIni() {
+      const src = (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || '').trim();
+      if (!src) { document.getElementById('iniStatus').textContent = 'No source selected'; return; }
+      let txt = document.getElementById('iniText').value || '';
+      const isRtsp = /^rtsp:\/\//i.test(src);
+      const uriVal = isRtsp ? src : (src.startsWith('/media/') ? 'file:///data/videos/' + src.slice(7) : (src.startsWith('/') ? 'file://' + src : src));
+      let lines = txt.split(/\r?\n/);
+      let patched = [];
+      let inSrc0 = false, sawSrc0 = false, sawEnable = false, sawType = false, sawUri = false;
+      let srcHeaderIndex = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const s = l.trim();
+        if (s.startsWith('[') && s.endsWith(']')) {
+          inSrc0 = /\[\s*source0\s*\]/i.test(s);
+          if (inSrc0) { sawSrc0 = true; srcHeaderIndex = patched.length; }
+          patched.push(l);
+          continue;
+        }
+        if (inSrc0) {
+          if (/^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
+          if (/^\s*type\s*=\s*/i.test(s)) { patched.push('type=3'); sawType = true; continue; }
+          if (/^\s*uri\s*=\s*/i.test(s)) { patched.push('uri=' + uriVal); sawUri = true; continue; }
+        }
+        patched.push(l);
+      }
+      if (!sawSrc0) { patched.push('[source0]'); srcHeaderIndex = patched.length - 1; }
+      const toInsert = [];
+      if (!sawEnable) toInsert.push('enable=1');
+      if (!sawType) toInsert.push('type=3');
+      if (!sawUri) toInsert.push('uri=' + uriVal);
+      if (toInsert.length) { const insertAt = srcHeaderIndex + 1; patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt)); }
+      document.getElementById('iniText').value = patched.join('\n');
+      document.getElementById('iniStatus').textContent = 'Source bound: ' + uriVal;
+    }
+    async function finalizeConfig() {
+      try {
+        const p = document.getElementById('iniPath').value || '/app/configs/source1_fp16.ini';
+        const content = document.getElementById('iniText').value || '';
+        const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) });
+        const saveJ = await saveR.json();
+        document.getElementById('iniStatus').textContent = JSON.stringify(saveJ);
+        const r1 = await fetch('/api/configs/read?path=' + encodeURIComponent(p));
+        const j1 = await r1.json();
+        if (j1.content !== undefined) { document.getElementById('iniPreview').value = j1.content; }
+        let pgie = '';
+        try { const r2 = await fetch('/api/configs/read?path=' + encodeURIComponent('/app/configs/pgie_primary.txt')); const j2 = await r2.json(); if (j2.content !== undefined) pgie = j2.content; } catch {}
+        document.getElementById('pgiePreview').value = pgie || '(pgie_primary.txt not found)';
+      } catch (e) { document.getElementById('iniStatus').textContent = e.message; }
+    }
     async function startHls() {
       let uri = document.getElementById('streamUri').value || '';
       if (!uri) { uri = document.getElementById('hlsUrl').value || ''; }
