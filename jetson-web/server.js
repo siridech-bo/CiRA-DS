@@ -322,6 +322,12 @@ app.get("/api/snapshot/list", async (req, res) => {
 
 app.get("/api/media/list", async (_req, res) => {
   try {
+    function pickExistingDir() {
+      const candidates = [MEDIA_DIR, "/data/videos", path.join(__dirname, "public", "media")];
+      for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch {} }
+      return MEDIA_DIR;
+    }
+    const base = pickExistingDir();
     const exts = new Set([".mp4", ".mkv", ".avi", ".mov", ".ts", ".h264", ".h265", ".webm"]);
     async function walk(p, depth, out) {
       const ents = await fs.promises.readdir(p, { withFileTypes: true });
@@ -331,14 +337,14 @@ app.get("/api/media/list", async (_req, res) => {
         else {
           const ext = (path.extname(full) || "").toLowerCase();
           if (exts.has(ext)) {
-            const rel = path.relative(MEDIA_DIR, full).split(path.sep).join("/");
+            const rel = path.relative(base, full).split(path.sep).join("/");
             out.push("/media/" + rel);
           }
         }
       }
     }
     const out = [];
-    await walk(MEDIA_DIR, 0, out);
+    await walk(base, 0, out);
     out.sort();
     res.json({ dir: "/media/", files: out });
   } catch (e) {
