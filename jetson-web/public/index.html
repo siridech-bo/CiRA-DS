@@ -108,6 +108,13 @@
         document.getElementById('localHealth').textContent = e.message;
       }
     }
+    function setSourceType(t) { const isFile = t === 'file'; const fp = document.getElementById('filePicker'); if (fp) fp.style.display = isFile ? '' : 'none'; const rFile = document.getElementById('srcTypeFile'); const rCam = document.getElementById('srcTypeCamera'); if (rFile && rCam) { rFile.checked = isFile; rCam.checked = !isFile; } }
+    async function refreshInputMedia() { try { const r = await fetch('/api/media/list'); const j = await r.json(); const sel = document.getElementById('inputMediaList'); const q = (document.getElementById('inputMediaSearch').value||'').toLowerCase(); sel.innerHTML=''; (j.files||[]).filter(p => !q || p.toLowerCase().includes(q)).forEach(p => { const o=document.createElement('option'); o.value=p; o.textContent=p.replace('/media/',''); sel.appendChild(o); }); } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
+    function selectInputMedia() { const sel=document.getElementById('inputMediaList'); const p=sel.value||''; document.getElementById('hlsUrl').value = p; }
+    function deriveStreamId(uri) { let h=0; for (let i=0;i<uri.length;i++){ h=(h*31 + uri.charCodeAt(i))>>>0; } return 'stream_' + (h%10); }
+    async function connectSource() { try { let uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; if (!uri) { document.getElementById('inputStatus').textContent = 'No source'; return; } const id = deriveStreamId(uri); const payload = { stream_id: id, uri, source_id: 0 }; const r = await fetch('/api/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Connected • ' + id; try { localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
+    async function disconnectSource() { try { const id = localStorage.getItem('currentStreamId') || 'stream_0'; const r = await fetch('/api/stream/' + encodeURIComponent(id), { method: 'DELETE' }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Disconnected • ' + id; } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
+    function goToPipeline() { try { const uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; const id = deriveStreamId(uri); localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} setTab('pipeline'); try { const el = document.getElementById('iniPath'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); } catch{} }
     function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-output','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
@@ -174,6 +181,23 @@
         <button onclick="stopHls()">Stop HLS</button>
         <button onclick="logsHls()">Logs</button>
       </div>
+      <div class="row" style="align-items:center">
+        <label style="flex:1"><input type="radio" name="srcType" id="srcTypeCamera" checked onchange="setSourceType('camera')" /> Camera</label>
+        <label style="flex:1"><input type="radio" name="srcType" id="srcTypeFile" onchange="setSourceType('file')" /> File</label>
+      </div>
+      <div id="filePicker" style="display:none">
+        <input id="inputMediaSearch" placeholder="search" />
+        <select id="inputMediaList" size="6" style="width:100%" onchange="selectInputMedia()"></select>
+        <div class="row">
+          <button onclick="refreshInputMedia()">Refresh Media</button>
+        </div>
+      </div>
+      <div class="row">
+        <button onclick="connectSource()">Connect</button>
+        <button onclick="disconnectSource()">Disconnect</button>
+        <button onclick="goToPipeline()">Go to Pipeline</button>
+      </div>
+      <div class="status" id="inputStatus"></div>
       <video id="video" playsinline controls muted></video>
       <div class="status" id="hlsStatus"></div>
     </div>
