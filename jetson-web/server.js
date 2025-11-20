@@ -646,6 +646,9 @@ app.get("/api/configs/list", async (req, res) => {
     }
     const base = pickExistingDir(CONFIGS_DIR);
     let dirParam = String(req.query.dir || base);
+    const extParam = String(req.query.ext || "ini").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const allowedExts = new Set(["ini", "txt", "cfg"]);
+    const ext = allowedExts.has(extParam) ? extParam : "ini";
     if (!dirParam.startsWith(base) || dirParam.includes("..")) dirParam = base;
     const out = [];
     async function walk(p, depth) {
@@ -653,7 +656,7 @@ app.get("/api/configs/list", async (req, res) => {
       for (const e of ents) {
         const full = path.join(p, e.name);
         if (e.isDirectory()) { if (depth < 4) { await walk(full, depth + 1); } }
-        else { const f = full.toLowerCase(); if (f.endsWith(".ini")) out.push(full); }
+        else { const f = full.toLowerCase(); if (f.endsWith("." + ext)) out.push(full); }
       }
     }
     await walk(dirParam, 0);
