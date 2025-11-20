@@ -558,7 +558,7 @@
       const iniPath = document.getElementById('iniPath').value || '/app/configs/rtsp_osd.ini';
       let txt = document.getElementById('iniText').value || '';
       let lines = txt.split(/\r?\n/);
-      let inPrimary = false, sawCfg = false, patched = [];
+      let inPrimary = false, sawCfg = false, sawEnable = false, patched = [];
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         const s = l.trim();
@@ -569,12 +569,22 @@
           patched.push(l);
           continue;
         }
+        if (inPrimary && /^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
         if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { patched.push('config-file=/app/configs/pgie_primary.txt'); sawCfg = true; continue; }
         patched.push(l);
       }
       if (!/\[\s*primary-gie\s*\]/i.test('\n'+txt)) {
         patched.push('[primary-gie]');
+        patched.push('enable=1');
         patched.push('config-file=/app/configs/pgie_primary.txt');
+      } else {
+        const insertAt = patched.findIndex(l => /\[\s*primary-gie\s*\]/i.test(l));
+        const toInsert = [];
+        if (!sawEnable) toInsert.push('enable=1');
+        if (!sawCfg) toInsert.push('config-file=/app/configs/pgie_primary.txt');
+        if (insertAt >= 0 && toInsert.length) {
+          patched = patched.slice(0, insertAt + 1).concat(toInsert).concat(patched.slice(insertAt + 1));
+        }
       }
       if (!/\[\s*osd\s*\]/i.test('\n'+txt)) {
         patched.push('[osd]');
@@ -601,12 +611,17 @@
         'parse-bbox-func-name=NvDsInferParseCustomBBox_Caffe',
         'custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl/libnvdsinfer_custom_impl.so',
         'num-detected-classes=4',
-        'cluster-mode=2'
+        'cluster-mode=2',
+        'network-mode=2'
       ].join('\n');
       try {
         const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: pgie }) });
         const j = await r.json();
         document.getElementById('iniStatus').textContent = 'Patched. PGIE: ' + JSON.stringify(j);
+        const labels = ['Vehicle','TwoWheeler','Person','RoadSign'].join('\n');
+        const r2 = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/labels.txt', content: labels }) });
+        const j2 = await r2.json();
+        document.getElementById('iniStatus').textContent += ' Labels: ' + JSON.stringify(j2);
       } catch (e) {
         document.getElementById('iniStatus').textContent = e.message;
       }
