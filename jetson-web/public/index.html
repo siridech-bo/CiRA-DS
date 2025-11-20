@@ -476,7 +476,40 @@
     async function finalizeConfig() {
       try {
         const p = document.getElementById('iniPath').value || '/app/configs/source1_fp16.ini';
-        const content = document.getElementById('iniText').value || '';
+        let content = document.getElementById('iniText').value || '';
+        try {
+          let lines = content.split(/\r?\n/);
+          let patched = [];
+          let inMux = false, sawMux = false;
+          let sawWidth = false, sawHeight = false, sawBatch = false, sawLive = false;
+          let muxHeaderIndex = -1;
+          for (let i = 0; i < lines.length; i++) {
+            const l = lines[i];
+            const s = l.trim();
+            if (s.startsWith('[') && s.endsWith(']')) {
+              inMux = /\[\s*streammux\s*\]/i.test(s);
+              if (inMux) { sawMux = true; muxHeaderIndex = patched.length; }
+              patched.push(l);
+              continue;
+            }
+            if (inMux) {
+              if (/^\s*width\s*=\s*/i.test(s)) { patched.push('width=1280'); sawWidth = true; continue; }
+              if (/^\s*height\s*=\s*/i.test(s)) { patched.push('height=720'); sawHeight = true; continue; }
+              if (/^\s*batch-size\s*=\s*/i.test(s)) { patched.push('batch-size=1'); sawBatch = true; continue; }
+              if (/^\s*live-source\s*=\s*/i.test(s)) { patched.push('live-source=1'); sawLive = true; continue; }
+            }
+            patched.push(l);
+          }
+          if (!sawMux) { patched.push('[streammux]'); muxHeaderIndex = patched.length - 1; }
+          const toInsert = [];
+          if (!sawWidth) toInsert.push('width=1280');
+          if (!sawHeight) toInsert.push('height=720');
+          if (!sawBatch) toInsert.push('batch-size=1');
+          if (!sawLive) toInsert.push('live-source=1');
+          if (toInsert.length) { const insertAt = muxHeaderIndex + 1; patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt)); }
+          content = patched.join('\n');
+          document.getElementById('iniText').value = content;
+        } catch {}
         const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) });
         const saveJ = await saveR.json();
         document.getElementById('iniStatus').textContent = JSON.stringify(saveJ);
