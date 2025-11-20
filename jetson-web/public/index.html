@@ -439,7 +439,27 @@
     async function saveIni() { try { const p = document.getElementById('iniPath').value || ''; const content = document.getElementById('iniText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     async function listIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('iniList'); sel.innerHTML = ''; if (j && Array.isArray(j.files)) { const prefix = (j && j.dir) || '/app/configs/'; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.startsWith(prefix) ? p.slice(prefix.length) : p.replace('/app/configs/',''); sel.appendChild(o); }); document.getElementById('iniStatus').textContent = 'Found ' + (j.files||[]).length + ' INIs'; } else { document.getElementById('iniStatus').textContent = (j && j.error) ? j.error : 'No INIs found'; } } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     function selectIniFromList() { const sel = document.getElementById('iniList'); const p = sel.value || ''; document.getElementById('iniPath').value = p; loadIni(); }
-    async function runIni() { const p = document.getElementById('iniPath').value || ''; const image = document.getElementById('dsImage').value || ''; const autoEngine = !!document.getElementById('dsAutoEngine').checked; try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample: 'app_custom_ini', uris: [p], image, autoEngine }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
+    async function runIni() {
+      const p = document.getElementById('iniPath').value || '';
+      const image = document.getElementById('dsImage').value || '';
+      const autoEngine = !!document.getElementById('dsAutoEngine').checked;
+      try {
+        let r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample: 'app_custom_ini', uris: [p], image, autoEngine }) });
+        let j = await r.json();
+        if (j && j.error === 'playlist-missing') {
+          try {
+            await startHls();
+            for (let i = 0; i < 20; i++) {
+              try { const resp = await fetch('/video/out.m3u8', { cache: 'no-store' }); if (resp.ok) break; } catch {}
+              await new Promise(res => setTimeout(res, 500));
+            }
+            r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample: 'app_custom_ini', uris: [p], image, autoEngine }) });
+            j = await r.json();
+          } catch {}
+        }
+        document.getElementById('iniStatus').textContent = JSON.stringify(j);
+      } catch (e) { document.getElementById('iniStatus').textContent = e.message; }
+    }
     function bindSourceToIni() {
       const src = (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || '').trim();
       if (!src) { document.getElementById('iniStatus').textContent = 'No source selected'; return; }
