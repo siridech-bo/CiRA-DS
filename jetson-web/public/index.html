@@ -275,7 +275,13 @@
       <h3>Rendered INI</h3>
       <textarea id="iniPreview" rows="10" style="width:100%;height:200px" readonly></textarea>
       <h3>Rendered PGIE</h3>
-      <textarea id="pgiePreview" rows="10" style="width:100%;height:200px" readonly></textarea>
+      <input id="pgiePath" placeholder="/app/configs/pgie_resnet10.txt" />
+      <textarea id="pgiePreview" rows="10" style="width:100%;height:200px" placeholder="Edit PGIE config"></textarea>
+      <div class="row">
+        <button onclick="loadPgie()">Load PGIE</button>
+        <button onclick="savePgie()">Save PGIE</button>
+      </div>
+      <div class="status" id="pgieStatus"></div>
     </div>
     <div class="card">
       <h2>Labels</h2>
@@ -518,8 +524,12 @@
         const j1 = await r1.json();
         if (j1.content !== undefined) { document.getElementById('iniPreview').value = j1.content; }
         let pgie = '';
-        try { const r2 = await fetch('/api/configs/read?path=' + encodeURIComponent('/app/configs/pgie_primary.txt')); const j2 = await r2.json(); if (j2.content !== undefined) pgie = j2.content; } catch {}
-        document.getElementById('pgiePreview').value = pgie || '(pgie_primary.txt not found)';
+        try {
+          const pp = document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt';
+          const r2 = await fetch('/api/configs/read?path=' + encodeURIComponent(pp));
+          const j2 = await r2.json();
+          if (j2.content !== undefined) { document.getElementById('pgiePreview').value = j2.content; document.getElementById('pgieStatus').textContent = 'Loaded'; }
+        } catch {}
       } catch (e) { document.getElementById('iniStatus').textContent = e.message; }
     }
     async function startHls() {
@@ -563,25 +573,25 @@
         const l = lines[i];
         const s = l.trim();
         if (s.startsWith('[') && s.endsWith(']')) {
-          if (inPrimary && !sawCfg) { patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'); }
+          if (inPrimary && !sawCfg) { const pPath = document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'; patched.push('config-file=' + pPath); }
           inPrimary = /\[\s*primary-gie\s*\]/i.test(s);
           sawCfg = false;
           patched.push(l);
           continue;
         }
         if (inPrimary && /^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
-        if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'); sawCfg = true; continue; }
+        if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { const pPath = document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'; patched.push('config-file=' + pPath); sawCfg = true; continue; }
         patched.push(l);
       }
       if (!/\[\s*primary-gie\s*\]/i.test('\n'+txt)) {
         patched.push('[primary-gie]');
         patched.push('enable=1');
-        patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt');
+        patched.push('config-file=' + (document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'));
       } else {
         const insertAt = patched.findIndex(l => /\[\s*primary-gie\s*\]/i.test(l));
         const toInsert = [];
         if (!sawEnable) toInsert.push('enable=1');
-        if (!sawCfg) toInsert.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt');
+        if (!sawCfg) toInsert.push('config-file=' + (document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt')));
         if (insertAt >= 0 && toInsert.length) {
           patched = patched.slice(0, insertAt + 1).concat(toInsert).concat(patched.slice(insertAt + 1));
         }
@@ -654,7 +664,7 @@
       try {
         let ptxt = '';
         try {
-          const r1 = await fetch('/api/configs/read?path=' + encodeURIComponent('/app/configs/pgie_primary.txt'));
+          const r1 = await fetch('/api/configs/read?path=' + encodeURIComponent(document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt'));
           const j1 = await r1.json();
           if (j1.content !== undefined) { ptxt = j1.content; }
         } catch {}
@@ -697,7 +707,8 @@
           const insertAt2 = classHeaderIndex + 1;
           ppatched = ppatched.slice(0, insertAt2).concat(['threshold=' + threshold]).concat(ppatched.slice(insertAt2));
         }
-        const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: ppatched.join('\n') }) });
+        const pPath = document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt';
+        const saveR = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pPath, content: ppatched.join('\n') }) });
         const saveJ = await saveR.json();
         document.getElementById('iniStatus').textContent = 'OSD applied. PGIE threshold: ' + JSON.stringify(saveJ);
       } catch (e) {
@@ -755,6 +766,8 @@
     function selectDsIniFromList() { const sel = document.getElementById('dsIniList'); const p = sel.value || ''; const text = document.getElementById('dsUris').value || ''; const lines = text.split(/\r?\n/); lines[0] = p; document.getElementById('dsUris').value = lines.join('\n'); }
     async function loadLabels() { try { const p = document.getElementById('labelsPath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('labelsText').value = j.content; document.getElementById('labelsStatus').textContent = 'Loaded'; } else { document.getElementById('labelsStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
     async function saveLabels() { try { const p = document.getElementById('labelsPath').value || '/app/configs/labels.txt'; const content = document.getElementById('labelsText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('labelsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('labelsStatus').textContent = e.message; } }
+    async function loadPgie() { try { const p = document.getElementById('pgiePath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('pgiePreview').value = j.content; document.getElementById('pgieStatus').textContent = 'Loaded'; } else { document.getElementById('pgieStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
+    async function savePgie() { try { const p = document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt'; const content = document.getElementById('pgiePreview').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('pgieStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
   </script>
 </body>
 </html>
