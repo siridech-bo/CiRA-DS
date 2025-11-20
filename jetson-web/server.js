@@ -488,6 +488,30 @@ app.post("/api/dsapp/start", async (req, res) => {
   const uris = (req.body && req.body.uris) || [];
   const image = (req.body && req.body.image) || DS_APP_IMAGE;
   const autoEngine = !!(req.body && req.body.autoEngine);
+  try {
+    if (sample === "app_custom_ini") {
+      const ini = Array.isArray(uris) && uris.length ? uris[0] : "";
+      if (ini && ini.startsWith("/app/configs/")) {
+        const hostIni = ini.replace("/app/configs/", "/data/ds/configs/");
+        try {
+          const txt = await fs.promises.readFile(hostIni, "utf8");
+          let inSrc = false; let uriVal = "";
+          const lines = txt.split(/\r?\n/);
+          for (const l of lines) {
+            const s = l.trim();
+            if (s.startsWith("[") && s.endsWith("]")) { inSrc = /\[\s*source0\s*\]/i.test(s); continue; }
+            if (inSrc && /^\s*uri\s*=\s*/i.test(s)) { uriVal = s.split("=").slice(1).join("=").trim(); break; }
+          }
+          if (uriVal && /^file:\/\/\/app\/public\/video\//i.test(uriVal)) {
+            const fname = uriVal.replace(/^file:\/\/\/app\/public\/video\//i, "");
+            const hostPath = path.join("/data/hls", fname);
+            try { await fs.promises.access(hostPath, fs.constants.R_OK); }
+            catch { return res.status(400).json({ ok: false, error: "playlist-missing", path: hostPath }); }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
   if (sample === "app_custom_ini" && autoEngine) {
     try {
       const ini = Array.isArray(uris) && uris.length ? uris[0] : "";
