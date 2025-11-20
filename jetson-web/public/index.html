@@ -563,25 +563,25 @@
         const l = lines[i];
         const s = l.trim();
         if (s.startsWith('[') && s.endsWith(']')) {
-          if (inPrimary && !sawCfg) { patched.push('config-file=/app/configs/pgie_primary.txt'); }
+          if (inPrimary && !sawCfg) { patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'); }
           inPrimary = /\[\s*primary-gie\s*\]/i.test(s);
           sawCfg = false;
           patched.push(l);
           continue;
         }
         if (inPrimary && /^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
-        if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { patched.push('config-file=/app/configs/pgie_primary.txt'); sawCfg = true; continue; }
+        if (inPrimary && /^\s*config-file\s*=\s*/i.test(s)) { patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'); sawCfg = true; continue; }
         patched.push(l);
       }
       if (!/\[\s*primary-gie\s*\]/i.test('\n'+txt)) {
         patched.push('[primary-gie]');
         patched.push('enable=1');
-        patched.push('config-file=/app/configs/pgie_primary.txt');
+        patched.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt');
       } else {
         const insertAt = patched.findIndex(l => /\[\s*primary-gie\s*\]/i.test(l));
         const toInsert = [];
         if (!sawEnable) toInsert.push('enable=1');
-        if (!sawCfg) toInsert.push('config-file=/app/configs/pgie_primary.txt');
+        if (!sawCfg) toInsert.push('config-file=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt');
         if (insertAt >= 0 && toInsert.length) {
           patched = patched.slice(0, insertAt + 1).concat(toInsert).concat(patched.slice(insertAt + 1));
         }
@@ -596,35 +596,7 @@
       }
       const newTxt = patched.join('\n');
       document.getElementById('iniText').value = newTxt;
-      const pgie = [
-        '[property]',
-        'gpu-id=0',
-        'network-type=0',
-        'model-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.caffemodel',
-        'proto-file=/opt/nvidia/deepstream/deepstream-6.0/samples/models/Primary_Detector/resnet10.prototxt',
-        'batch-size=1',
-        'interval=0',
-        'gie-unique-id=1',
-        'maintain-aspect-ratio=1',
-        'labelfile-path=/app/configs/labels.txt',
-        'net-scale-factor=0.00392156862745098',
-        'parse-bbox-func-name=NvDsInferParseCustomBBox_Caffe',
-        'custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl/libnvdsinfer_custom_impl.so',
-        'num-detected-classes=4',
-        'cluster-mode=2',
-        'network-mode=2'
-      ].join('\n');
-      try {
-        const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/pgie_primary.txt', content: pgie }) });
-        const j = await r.json();
-        document.getElementById('iniStatus').textContent = 'Patched. PGIE: ' + JSON.stringify(j);
-        const labels = ['Vehicle','TwoWheeler','Person','RoadSign'].join('\n');
-        const r2 = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '/app/configs/labels.txt', content: labels }) });
-        const j2 = await r2.json();
-        document.getElementById('iniStatus').textContent += ' Labels: ' + JSON.stringify(j2);
-      } catch (e) {
-        document.getElementById('iniStatus').textContent = e.message;
-      }
+      try { document.getElementById('iniStatus').textContent = 'Primary GIE patched to sample config'; } catch {}
     }
     async function patchOsdSettings() {
       const textSize = Number(document.getElementById('osdTextSize').value || 26);
