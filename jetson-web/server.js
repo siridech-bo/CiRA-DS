@@ -590,6 +590,13 @@ app.post("/api/dsapp/start", async (req, res) => {
     "/data/hls:/app/public/video",
     "/data/videos:/data/videos"
   ];
+  try {
+    const libDir = "/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl";
+    const libPath = path.join(libDir, "libnvdsinfer_custom_impl.so");
+    if (fs.existsSync(libPath)) {
+      binds.push(`${libDir}:${libDir}`);
+    }
+  } catch {}
   const env = [
     `DISPLAY=${process.env.DISPLAY || ":0"}`,
     "CUDA_VER=10.2",
