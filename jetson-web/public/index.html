@@ -267,6 +267,7 @@
         <button onclick="runIni()">Run</button>
         <button onclick="patchIniLabels()">Patch Labels</button>
         <button onclick="patchOsdSettings()">Apply OSD</button>
+        <button onclick="patchSinkRtsp()">Apply RTSP Sink</button>
         <button onclick="bindSourceToIni()">Bind Source to INI</button>
         <button onclick="finalizeConfig()">Finalize Configuration</button>
       </div>
@@ -715,6 +716,42 @@
       } catch (e) {
         document.getElementById('iniStatus').textContent = e.message;
       }
+    }
+    function patchSinkRtsp() {
+      const port = 8554;
+      const pathStr = '/ds-test';
+      let txt = document.getElementById('iniText').value || '';
+      let lines = txt.split(/\r?\n/);
+      let patched = [];
+      let inSink0 = false, sawSink0 = false;
+      let sawType = false, sawPort = false, sawPath = false, sawSync = false;
+      let sinkHeaderIndex = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const s = l.trim();
+        if (s.startsWith('[') && s.endsWith(']')) {
+          inSink0 = /\[\s*sink0\s*\]/i.test(s);
+          if (inSink0) { sawSink0 = true; sinkHeaderIndex = patched.length; }
+          patched.push(l);
+          continue;
+        }
+        if (inSink0) {
+          if (/^\s*type\s*=\s*/i.test(s)) { patched.push('type=4'); sawType = true; continue; }
+          if (/^\s*rtsp-port\s*=\s*/i.test(s)) { patched.push('rtsp-port=' + port); sawPort = true; continue; }
+          if (/^\s*rtsp-path\s*=\s*/i.test(s)) { patched.push('rtsp-path=' + pathStr); sawPath = true; continue; }
+          if (/^\s*sync\s*=\s*/i.test(s)) { patched.push('sync=0'); sawSync = true; continue; }
+        }
+        patched.push(l);
+      }
+      if (!sawSink0) { patched.push('[sink0]'); sinkHeaderIndex = patched.length - 1; }
+      const toInsert = [];
+      if (!sawType) toInsert.push('type=4');
+      if (!sawPort) toInsert.push('rtsp-port=' + port);
+      if (!sawPath) toInsert.push('rtsp-path=' + pathStr);
+      if (!sawSync) toInsert.push('sync=0');
+      if (toInsert.length) { const insertAt = sinkHeaderIndex + 1; patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt)); }
+      document.getElementById('iniText').value = patched.join('\n');
+      document.getElementById('iniStatus').textContent = 'RTSP sink applied: ' + pathStr + ' on ' + port;
     }
     async function listDsIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('dsIniList'); sel.innerHTML = ''; if (j && Array.isArray(j.files)) { const prefix = (j && j.dir) || '/app/configs/'; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.startsWith(prefix) ? p.slice(prefix.length) : p.replace('/app/configs/',''); sel.appendChild(o); }); document.getElementById('dsStatus').textContent = 'Found ' + (j.files||[]).length + ' INIs'; } else { document.getElementById('dsStatus').textContent = (j && j.error) ? j.error : 'No INIs found'; } } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     function selectDsIniFromList() { const sel = document.getElementById('dsIniList'); const p = sel.value || ''; const text = document.getElementById('dsUris').value || ''; const lines = text.split(/\r?\n/); lines[0] = p; document.getElementById('dsUris').value = lines.join('\n'); }
