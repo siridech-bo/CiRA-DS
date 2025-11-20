@@ -591,7 +591,7 @@
         const insertAt = patched.findIndex(l => /\[\s*primary-gie\s*\]/i.test(l));
         const toInsert = [];
         if (!sawEnable) toInsert.push('enable=1');
-        if (!sawCfg) toInsert.push('config-file=' + (document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt')));
+        if (!sawCfg) toInsert.push('config-file=' + (document.getElementById('pgiePath').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/dstest1_pgie_config.txt'));
         if (insertAt >= 0 && toInsert.length) {
           patched = patched.slice(0, insertAt + 1).concat(toInsert).concat(patched.slice(insertAt + 1));
         }
