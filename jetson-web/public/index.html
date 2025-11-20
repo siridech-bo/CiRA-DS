@@ -162,15 +162,6 @@
       </div>
       <div class="status" id="jsonLogs" style="white-space:pre-wrap"></div>
     </div>
-    <div class="card">
-      <h2>Admin</h2>
-      <div class="row">
-        <button onclick="loadAdminEnv()">Env</button>
-        <button onclick="loadAdminContainers()">Containers</button>
-      </div>
-      <div class="status" id="adminEnv"></div>
-      <div class="status" id="adminContainers"></div>
-    </div>
   </div>
   <div class="grid" id="tab-input">
     <div class="card">
@@ -339,6 +330,15 @@
         <button onclick="localHealth()">Refresh</button>
       </div>
       <div class="status" id="localHealth"></div>
+    </div>
+    <div class="card">
+      <h2>Admin</h2>
+      <div class="row">
+        <button onclick="loadAdminEnv()">Env</button>
+        <button onclick="loadAdminContainers()">Containers</button>
+      </div>
+      <div class="status" id="adminEnv"></div>
+      <div class="status" id="adminContainers"></div>
     </div>
   </div>
   <script>
