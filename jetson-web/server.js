@@ -228,7 +228,17 @@ app.post("/api/hls/start", async (req, res) => {
   }
   if (created.statusCode >= 200 && created.statusCode < 300) {
     const start = await dockerRequest("POST", "/containers/ds_hls/start");
-    if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
+    if (start.statusCode >= 200 && start.statusCode < 300) {
+      ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
+      try {
+        await new Promise(r => setTimeout(r, 2000));
+        await fs.promises.access(target, fs.constants.R_OK);
+      } catch {
+        try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
+        try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
+        ok = false; used = "";
+      }
+    }
   }
   if (!ok) {
     const cmds = [];
@@ -246,7 +256,18 @@ app.post("/api/hls/start", async (req, res) => {
       const created2 = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
       if (created2.statusCode < 200 || created2.statusCode >= 300) continue;
       const start2 = await dockerRequest("POST", "/containers/ds_hls/start");
-      if (start2.statusCode >= 200 && start2.statusCode < 300) { ok = true; used = c; break; }
+      if (start2.statusCode >= 200 && start2.statusCode < 300) {
+        ok = true; used = c;
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          await fs.promises.access(target, fs.constants.R_OK);
+          break;
+        } catch {
+          try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
+          try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
+          ok = false; used = "";
+        }
+      }
     }
   }
   if (!ok) {
@@ -261,10 +282,20 @@ app.post("/api/hls/start", async (req, res) => {
       await dockerRequest("DELETE", "/containers/ds_hls?force=true");
       created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
     }
-    if (created.statusCode >= 200 && created.statusCode < 300) {
-      const start = await dockerRequest("POST", "/containers/ds_hls/start");
-      if (start.statusCode >= 200 && start.statusCode < 300) { ok = true; used = `ffmpeg ${ffCmd.join(" ")}`; }
+  if (created.statusCode >= 200 && created.statusCode < 300) {
+    const start = await dockerRequest("POST", "/containers/ds_hls/start");
+    if (start.statusCode >= 200 && start.statusCode < 300) {
+      ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
+      try {
+        await new Promise(r => setTimeout(r, 2000));
+        await fs.promises.access(target, fs.constants.R_OK);
+      } catch {
+        try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
+        try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
+        ok = false; used = "";
+      }
     }
+  }
   }
   if (!ok) return res.status(500).json({ error: "failed to start hls" });
   res.json({ ok: true, pipeline: used, playlist: "/video/out.m3u8" });
