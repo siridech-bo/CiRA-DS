@@ -734,12 +734,12 @@
     }
     function patchSinkRtsp() {
       const port = 8554;
-      const pathStr = '/ds-test';
+      const udp = 5400;
       let txt = document.getElementById('iniText').value || '';
       let lines = txt.split(/\r?\n/);
       let patched = [];
       let inSink0 = false, sawSink0 = false;
-      let sawEnable = false, sawType = false, sawPort = false, sawPath = false, sawSync = false;
+      let sawEnable = false, sawType = false, sawCodec = false, sawEnc = false, sawBitrate = false, sawPort = false, sawUdp = false, sawSync = false, sawQos = false;
       let sinkHeaderIndex = -1;
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
@@ -753,9 +753,13 @@
         if (inSink0) {
           if (/^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
           if (/^\s*type\s*=\s*/i.test(s)) { patched.push('type=4'); sawType = true; continue; }
+          if (/^\s*codec\s*=\s*/i.test(s)) { patched.push('codec=1'); sawCodec = true; continue; }
+          if (/^\s*enc-type\s*=\s*/i.test(s)) { patched.push('enc-type=0'); sawEnc = true; continue; }
+          if (/^\s*bitrate\s*=\s*/i.test(s)) { patched.push('bitrate=4000000'); sawBitrate = true; continue; }
           if (/^\s*rtsp-port\s*=\s*/i.test(s)) { patched.push('rtsp-port=' + port); sawPort = true; continue; }
-          if (/^\s*rtsp-path\s*=\s*/i.test(s)) { patched.push('rtsp-path=' + pathStr); sawPath = true; continue; }
+          if (/^\s*udp-port\s*=\s*/i.test(s)) { patched.push('udp-port=' + udp); sawUdp = true; continue; }
           if (/^\s*sync\s*=\s*/i.test(s)) { patched.push('sync=0'); sawSync = true; continue; }
+          if (/^\s*qos\s*=\s*/i.test(s)) { patched.push('qos=0'); sawQos = true; continue; }
         }
         patched.push(l);
       }
@@ -763,12 +767,16 @@
       const toInsert = [];
       if (!sawEnable) toInsert.push('enable=1');
       if (!sawType) toInsert.push('type=4');
+      if (!sawCodec) toInsert.push('codec=1');
+      if (!sawEnc) toInsert.push('enc-type=0');
+      if (!sawBitrate) toInsert.push('bitrate=4000000');
       if (!sawPort) toInsert.push('rtsp-port=' + port);
-      if (!sawPath) toInsert.push('rtsp-path=' + pathStr);
+      if (!sawUdp) toInsert.push('udp-port=' + udp);
       if (!sawSync) toInsert.push('sync=0');
+      if (!sawQos) toInsert.push('qos=0');
       if (toInsert.length) { const insertAt = sinkHeaderIndex + 1; patched = patched.slice(0, insertAt).concat(toInsert).concat(patched.slice(insertAt)); }
       document.getElementById('iniText').value = patched.join('\n');
-      document.getElementById('iniStatus').textContent = 'RTSP sink applied: ' + pathStr + ' on ' + port;
+      document.getElementById('iniStatus').textContent = 'RTSP sink applied on port ' + port;
     }
     async function listDsIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('dsIniList'); sel.innerHTML = ''; if (j && Array.isArray(j.files)) { const prefix = (j && j.dir) || '/app/configs/'; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.startsWith(prefix) ? p.slice(prefix.length) : p.replace('/app/configs/',''); sel.appendChild(o); }); document.getElementById('dsStatus').textContent = 'Found ' + (j.files||[]).length + ' INIs'; } else { document.getElementById('dsStatus').textContent = (j && j.error) ? j.error : 'No INIs found'; } } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     function selectDsIniFromList() { const sel = document.getElementById('dsIniList'); const p = sel.value || ''; const text = document.getElementById('dsUris').value || ''; const lines = text.split(/\r?\n/); lines[0] = p; document.getElementById('dsUris').value = lines.join('\n'); }
