@@ -744,6 +744,7 @@
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         const s = l.trim();
+        if (/^\s*rtsp-path\s*=\s*/i.test(s)) { /* drop unsupported key */ continue; }
         if (s.startsWith('[') && s.endsWith(']')) {
           inSink0 = /\[\s*sink0\s*\]/i.test(s);
           if (inSink0) { sawSink0 = true; sinkHeaderIndex = patched.length; }
