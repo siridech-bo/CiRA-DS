@@ -739,7 +739,7 @@
       let lines = txt.split(/\r?\n/);
       let patched = [];
       let inSink0 = false, sawSink0 = false;
-      let sawType = false, sawPort = false, sawPath = false, sawSync = false;
+      let sawEnable = false, sawType = false, sawPort = false, sawPath = false, sawSync = false;
       let sinkHeaderIndex = -1;
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
@@ -751,6 +751,7 @@
           continue;
         }
         if (inSink0) {
+          if (/^\s*enable\s*=\s*/i.test(s)) { patched.push('enable=1'); sawEnable = true; continue; }
           if (/^\s*type\s*=\s*/i.test(s)) { patched.push('type=4'); sawType = true; continue; }
           if (/^\s*rtsp-port\s*=\s*/i.test(s)) { patched.push('rtsp-port=' + port); sawPort = true; continue; }
           if (/^\s*rtsp-path\s*=\s*/i.test(s)) { patched.push('rtsp-path=' + pathStr); sawPath = true; continue; }
@@ -760,6 +761,7 @@
       }
       if (!sawSink0) { patched.push('[sink0]'); sinkHeaderIndex = patched.length - 1; }
       const toInsert = [];
+      if (!sawEnable) toInsert.push('enable=1');
       if (!sawType) toInsert.push('type=4');
       if (!sawPort) toInsert.push('rtsp-port=' + port);
       if (!sawPath) toInsert.push('rtsp-path=' + pathStr);
