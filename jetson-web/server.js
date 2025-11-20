@@ -527,6 +527,7 @@ app.post("/api/dsapp/start", async (req, res) => {
         try {
           const txt = await fs.promises.readFile(hostIni, "utf8");
           let inSrc = false; let uriVal = "";
+          let inPg = false; let cfgVal = "";
           const lines = txt.split(/\r?\n/);
           for (const l of lines) {
             const s = l.trim();
@@ -538,6 +539,16 @@ app.post("/api/dsapp/start", async (req, res) => {
             const hostPath = path.join("/data/hls", fname);
             try { await fs.promises.access(hostPath, fs.constants.R_OK); }
             catch { return res.status(400).json({ ok: false, error: "playlist-missing", path: hostPath }); }
+          }
+          for (const l of lines) {
+            const s = l.trim();
+            if (s.startsWith("[") && s.endsWith("]")) { inPg = /\[\s*primary-gie\s*\]/i.test(s); continue; }
+            if (inPg && /^\s*config-file\s*=\s*/i.test(s)) { cfgVal = s.split("=").slice(1).join("=").trim(); break; }
+          }
+          if (cfgVal && /^\/app\/configs\//.test(cfgVal)) {
+            const hostCfg = cfgVal.replace("/app/configs/", "/data/ds/configs/");
+            try { await fs.promises.access(hostCfg, fs.constants.R_OK); }
+            catch { return res.status(400).json({ ok: false, error: "pgie-missing", path: hostCfg }); }
           }
         } catch {}
       }
