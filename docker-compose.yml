@@ -5,9 +5,9 @@ services:
     container_name: openapi-spec
     restart: unless-stopped
     network_mode: host
-    command: bash -c "mkdir -p /usr/share/openapi/api && cd /usr/share/openapi && python3 -m http.server 8080 --bind 0.0.0.0"
+    command: bash -c "cd /opt/openapi && python3 -m http.server 8080 --bind 0.0.0.0"
     volumes:
-      - ./jetson-web/openapi.json:/usr/share/openapi/api/openapi.json:ro
+      - ./jetson-web:/opt/openapi/api:ro
   web:
     build:
       context: .
