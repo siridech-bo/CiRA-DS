@@ -476,6 +476,7 @@ app.post("/api/debug/run", async (req, res) => {
     const binds = [
       `${MEDIA_DIR}:${MEDIA_DIR}`,
       `${CONFIGS_DIR}:${CONFIGS_DIR}`,
+      "/data/ds/configs:/data/ds/configs",
       "/data/hls:/app/public/video"
     ];
     const env = [
@@ -636,6 +637,8 @@ app.post("/api/dsapp/start", async (req, res) => {
     "/tmp/.X11-unix:/tmp/.X11-unix",
     "/data/ds/configs:/app/configs",
     "/data/ds/configs:/data/ds/configs",
+    "/data/weight_config:/data/weight_config",
+    "/app/configs:/host_app_configs",
     "/data/hls:/app/public/video",
     "/data/videos:/data/videos"
   ];
