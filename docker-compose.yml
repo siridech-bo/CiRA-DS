@@ -1,8 +1,7 @@
 version: "3.8"
 services:
   web:
-    image: arm64v8/node:18
-    pull_policy: never
+    image: node:18
     container_name: jetson-web
     working_dir: /app
     network_mode: host
@@ -24,3 +23,12 @@ services:
       - /data/ds/configs:/data/ds/configs
       - /data/snapshots:/data/snapshots
       - /opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl:/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl
+  spec:
+    image: nginx:alpine
+    container_name: openapi-spec
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./jetson-web/openapi.json:/usr/share/nginx/html/openapi.json:ro
+      - ./nginx/openapi.conf:/etc/nginx/conf.d/default.conf:ro
