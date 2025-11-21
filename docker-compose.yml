@@ -15,7 +15,7 @@ services:
     container_name: jetson-web
     network_mode: host
     environment:
-      - PORT=80
+      - PORT=3000
       - JETSON_ONLY=true
       - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
       - DS_APP_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples

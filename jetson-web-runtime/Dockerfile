@@ -25,9 +25,9 @@ RUN set -eux; \
 # Copy application
 COPY jetson-web /app
 
-# Install app dependencies (offline-friendly if node_modules is present)
+# Install app dependencies
 RUN set -eux; \
-    if [ -d "/app/node_modules" ]; then echo "Using pre-existing node_modules"; else npm install --no-audit --no-fund || true; fi
+    if [ -d "/app/node_modules" ]; then echo "Using pre-existing node_modules"; else npm ci --no-audit --no-fund; fi
 
 ENV PORT=80
 CMD ["node","server.js"]
