@@ -267,7 +267,7 @@ app.post("/api/hls/start", async (req, res) => {
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! matroskademux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
     }
     for (const c of cmds) {
-      const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+      const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Binds: binds } };
       await dockerRequest("DELETE", "/containers/ds_hls?force=true");
       const created2 = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
       if (created2.statusCode < 200 || created2.statusCode >= 300) continue;
