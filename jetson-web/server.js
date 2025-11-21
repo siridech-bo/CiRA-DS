@@ -485,10 +485,7 @@ app.post("/api/debug/run", async (req, res) => {
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
-      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
-      "GST_PLUGIN_PATH=/host_app_configs/plugins",
-      "GST_PLUGIN_SYSTEM_PATH=/host_app_configs/plugins",
-      "GST_PLUGIN_PATH_1_0=/host_app_configs/plugins"
+      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
     ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
     const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
@@ -581,6 +578,23 @@ app.post("/api/dsapp/start", async (req, res) => {
         const hostIni = ini.replace("/app/configs/", "/data/ds/configs/");
         try {
           const txt = await fs.promises.readFile(hostIni, "utf8");
+          try {
+            const lines0 = txt.split(/\r?\n/);
+            let patched0 = [];
+            let inSink0 = false;
+            let modified0 = false;
+            for (const l0 of lines0) {
+              const s0 = l0.trim();
+              if (s0.startsWith("[") && s0.endsWith("]")) {
+                inSink0 = /\[\s*sink\d+\s*\]/i.test(s0);
+                patched0.push(l0);
+                continue;
+              }
+              if (inSink0 && /^\s*rtsp-path\s*=\s*/i.test(s0)) { modified0 = true; continue; }
+              patched0.push(l0);
+            }
+            if (modified0) { await fs.promises.writeFile(hostIni, patched0.join("\n"), "utf8"); }
+          } catch {}
           let inSrc = false; let uriVal = "";
           let inPg = false; let cfgVal = "";
           const lines = txt.split(/\r?\n/);
@@ -630,7 +644,37 @@ app.post("/api/dsapp/start", async (req, res) => {
             const hasEngine = /\n\s*model-engine-file\s*=\s*/i.test("\n"+cfg);
             cfg = cfg.split(/\r?\n/).filter(line => !/^\s*model-engine-file\s*=/i.test(line)).join("\n");
             if (!/\n\s*network-mode\s*=\s*/i.test("\n"+cfg)) { cfg += "\nnetwork-mode=1\n"; }
-            if (hasEngine) { await fs.promises.writeFile(resolved, cfg, "utf8"); }
+            let changed = false;
+            try {
+              const isYolo = /\n\s*parse-bbox-func-name\s*=\s*NvDsInferParseCustomYolo/i.test("\n"+cfg) || /\n\s*parse-bbox-func-name\s*=\s*NvDsInferParseCustomYoloV\d+/i.test("\n"+cfg);
+              if (isYolo) {
+                const ycfg = "/data/videos/v3/v3/yolov3.cfg";
+                const ywts = "/data/videos/v3/v3/yolov3.weights";
+                const hasCfg = (() => { try { fs.accessSync(ycfg, fs.constants.R_OK); return true; } catch { return false; } })();
+                const hasWts = (() => { try { fs.accessSync(ywts, fs.constants.R_OK); return true; } catch { return false; } })();
+                const lines = cfg.split(/\r?\n/);
+                function upsert(key, value) {
+                  let found = false;
+                  const re = new RegExp("^\\s*" + key.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "\\s*=\\s*", "i");
+                  for (let i = 0; i < lines.length; i++) {
+                    if (re.test(lines[i])) { lines[i] = key + "=" + value; found = true; break; }
+                  }
+                  if (!found) { lines.push(key + "=" + value); }
+                  changed = true;
+                }
+                if (hasCfg && hasWts) {
+                  upsert("model-file", ycfg);
+                  upsert("model-weights", ywts);
+                }
+                if (!/\n\s*batch-size\s*=\s*/i.test("\n"+cfg)) { lines.push("batch-size=1"); changed = true; }
+                if (!/\n\s*custom-lib-path\s*=\s*/i.test("\n"+cfg)) {
+                  lines.push("custom-lib-path=/host_app_configs/yolo_custom/libnvdsinfer_custom_impl_Yolo.so");
+                  changed = true;
+                }
+                cfg = lines.join("\n");
+              }
+            } catch {}
+            if (hasEngine || changed) { await fs.promises.writeFile(resolved, cfg, "utf8"); }
           } catch {}
         }
       }
