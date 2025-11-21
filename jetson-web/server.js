@@ -138,6 +138,7 @@ const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
 const MEDIA_DIR = process.env.MEDIA_DIR || "/data/videos";
 app.use("/snapshots", express.static(SNAP_DIR));
+app.use("/media", express.static(MEDIA_DIR));
 
 app.post("/api/snapshot/start", async (req, res) => {
   let uri = (req.body && req.body.uri) || "";
