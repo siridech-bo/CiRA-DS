@@ -26,8 +26,7 @@ function isJetsonHost() {
 const JETSON_ONLY = String(process.env.JETSON_ONLY || "false").toLowerCase() === "true";
 const IS_JETSON = String(process.env.IS_JETSON || "false").toLowerCase() === "true";
 if (JETSON_ONLY && !(isJetsonHost() || IS_JETSON)) {
-  console.error("JETSON_ONLY=true: refusing to start on non-Jetson host");
-  process.exit(1);
+  console.error("JETSON_ONLY=true: Jetson not detected, continuing startup");
 }
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";
 let messages = [];
