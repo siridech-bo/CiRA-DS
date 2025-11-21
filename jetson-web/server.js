@@ -490,7 +490,7 @@ app.post("/api/debug/run", async (req, res) => {
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
     const start = await dockerRequest("POST", "/containers/ds_debug/start");
     if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 180000));
     const logs = await dockerRequest("GET", "/containers/ds_debug/logs?stdout=1&stderr=1&tail=800");
     await dockerRequest("POST", "/containers/ds_debug/stop");
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
