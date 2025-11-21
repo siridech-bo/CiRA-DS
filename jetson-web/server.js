@@ -569,13 +569,19 @@ app.get("/api/dsapp/samples", (_req, res) => {
 app.post("/api/dspython/start", async (req, res) => {
   try {
     const shouldInstall = !!(req.body && req.body.install);
+    const useGit = !!(req.body && req.body.useGit);
     const parts = [];
     if (shouldInstall) {
       parts.push("apt-get update");
-      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev");
+      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev" + (useGit ? " git" : ""));
     }
     parts.push("python3 -c \"import gi; gi.require_version('Gst','1.0'); from gi.repository import Gst; import sys; print('GI_OK'); print(sys.version)\"");
-    parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
+    if (useGit) {
+      parts.push("pip3 install --upgrade pip setuptools wheel");
+      parts.push("pip3 install --no-cache-dir git+https://github.com/NVIDIA-AI-IOT/deepstream_python_apps.git#subdirectory=bindings || echo PYDS_INSTALL_FAILED");
+    } else {
+      parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
+    }
     parts.push("python3 -c \"import sys; ok=1;\ntry:\n import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\nexcept Exception as e:\n ok=0; print('PYDS_ERR', e)\nprint('DONE', ok)\"");
     const cmd = parts.join(" && ");
     const binds = [
