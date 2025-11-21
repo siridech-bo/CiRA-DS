@@ -31,4 +31,3 @@ services:
       - /data/snapshots:/data/snapshots
       - /opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl:/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl
       - ./jetson-web/server.js:/app/server.js:ro
-      - ./jetson-web/public:/app/public:ro
