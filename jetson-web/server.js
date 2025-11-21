@@ -566,6 +566,63 @@ app.get("/api/dsapp/samples", (_req, res) => {
   ]});
 });
 
+app.post("/api/dspython/start", async (req, res) => {
+  try {
+    const shouldInstall = !!(req.body && req.body.install);
+    const parts = [];
+    if (shouldInstall) {
+      parts.push("apt-get update");
+      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gst-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev");
+    }
+    parts.push("python3 -c \"import gi; gi.require_version('Gst','1.0'); from gi.repository import Gst; import sys; print('GI_OK'); print(sys.version)\"");
+    parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
+    parts.push("python3 -c \"import sys; ok=1;\ntry:\n import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\nexcept Exception as e:\n ok=0; print('PYDS_ERR', e)\nprint('DONE', ok)\"");
+    const cmd = parts.join(" && ");
+    const binds = [
+      `${MEDIA_DIR}:${MEDIA_DIR}`,
+      `${CONFIGS_DIR}:${CONFIGS_DIR}`,
+      "/data/ds/configs:/data/ds/configs",
+      "/data/weight_config:/data/weight_config",
+      "/app/configs:/host_app_configs",
+      "/data/hls:/app/public/video"
+    ];
+    const env = [
+      `DISPLAY=${process.env.DISPLAY || ":0"}`,
+      "CUDA_VER=10.2",
+      "PLATFORM_TEGRA=1",
+      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+    ];
+    await dockerRequest("DELETE", "/containers/ds_python?force=true");
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const created = await dockerRequest("POST", "/containers/create?name=ds_python", body);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
+    const start = await dockerRequest("POST", "/containers/ds_python/start");
+    if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
+    res.json({ status: "started" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.get("/api/dspython/logs", async (_req, res) => {
+  try {
+    const logs = await dockerRequest("GET", "/containers/ds_python/logs?stdout=1&stderr=1&tail=1600");
+    res.type("text/plain").send(logs.body || "");
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/dspython/stop", async (_req, res) => {
+  try {
+    await dockerRequest("POST", "/containers/ds_python/stop");
+    await dockerRequest("DELETE", "/containers/ds_python?force=true");
+    res.json({ status: "stopped" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.post("/api/dsapp/start", async (req, res) => {
   const sample = (req.body && req.body.sample) || "test1";
   const uris = (req.body && req.body.uris) || [];
