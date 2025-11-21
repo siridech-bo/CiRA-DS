@@ -13,12 +13,13 @@ const PORT = process.env.PORT || 5000;
 function isJetsonHost() {
   try {
     if (os.platform() !== "linux") return false;
-    try { if (fs.existsSync("/opt/nvidia/deepstream")) return true; } catch {}
+    try { if (fs.existsSync("/opt/nvidia/deepstream/deepstream-6.0")) return true; } catch {}
     if (fs.existsSync("/etc/nv_tegra_release")) return true;
     try {
       const m = fs.readFileSync("/proc/device-tree/model", "utf8").toLowerCase();
       if (m.includes("jetson")) return true;
     } catch {}
+    try { if (process.arch === "arm64") return true; } catch {}
   } catch {}
   return false;
 }
