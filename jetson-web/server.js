@@ -469,6 +469,31 @@ app.get("/api/admin/env", (_req, res) => {
   });
 });
 
+app.post("/api/debug/run", async (req, res) => {
+  try {
+    const cmd = String((req.body && req.body.cmd) || "").trim();
+    if (!cmd) return res.status(400).json({ error: "cmd required" });
+    const binds = [
+      `${MEDIA_DIR}:${MEDIA_DIR}`,
+      `${CONFIGS_DIR}:${CONFIGS_DIR}`,
+      "/data/hls:/app/public/video"
+    ];
+    await dockerRequest("DELETE", "/containers/ds_debug?force=true");
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const created = await dockerRequest("POST", "/containers/create?name=ds_debug", body);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
+    const start = await dockerRequest("POST", "/containers/ds_debug/start");
+    if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
+    await new Promise(r => setTimeout(r, 1200));
+    const logs = await dockerRequest("GET", "/containers/ds_debug/logs?stdout=1&stderr=1&tail=800");
+    await dockerRequest("POST", "/containers/ds_debug/stop");
+    await dockerRequest("DELETE", "/containers/ds_debug?force=true");
+    res.type("text/plain").send(logs.body || "");
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.get("/api/admin/containers", async (_req, res) => {
   const names = ["ds_app","ds_hls","ds_snapshot","rtsp_server"];
   const out = {};
