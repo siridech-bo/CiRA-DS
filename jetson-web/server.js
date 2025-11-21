@@ -477,6 +477,7 @@ app.post("/api/debug/run", async (req, res) => {
       `${MEDIA_DIR}:${MEDIA_DIR}`,
       `${CONFIGS_DIR}:${CONFIGS_DIR}`,
       "/data/ds/configs:/data/ds/configs",
+      "/app/configs:/host_app_configs",
       "/data/hls:/app/public/video"
     ];
     const env = [
