@@ -248,7 +248,7 @@ app.post("/api/hls/start", async (req, res) => {
     if (start.statusCode >= 200 && start.statusCode < 300) {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 15000));
         await fs.promises.access(target, fs.constants.R_OK);
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
@@ -260,8 +260,8 @@ app.post("/api/hls/start", async (req, res) => {
   if (!ok) {
     const cmds = [];
     if (isRtsp) {
-      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
-      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=200 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=500 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=500 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
     } else {
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
@@ -276,7 +276,7 @@ app.post("/api/hls/start", async (req, res) => {
       if (start2.statusCode >= 200 && start2.statusCode < 300) {
         ok = true; used = c;
         try {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 15000));
           await fs.promises.access(target, fs.constants.R_OK);
           break;
         } catch {
@@ -304,7 +304,7 @@ app.post("/api/hls/start", async (req, res) => {
     if (start.statusCode >= 200 && start.statusCode < 300) {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 15000));
         await fs.promises.access(target, fs.constants.R_OK);
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
