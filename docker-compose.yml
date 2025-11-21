@@ -17,6 +17,7 @@ services:
     environment:
       - PORT=3000
       - JETSON_ONLY=true
+      - IS_JETSON=true
       - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
       - DS_APP_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
     restart: unless-stopped

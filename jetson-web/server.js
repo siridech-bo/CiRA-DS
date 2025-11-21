@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 5000;
 function isJetsonHost() {
   try {
     if (os.platform() !== "linux") return false;
+    try { if (fs.existsSync("/opt/nvidia/deepstream")) return true; } catch {}
     if (fs.existsSync("/etc/nv_tegra_release")) return true;
     try {
       const m = fs.readFileSync("/proc/device-tree/model", "utf8").toLowerCase();
@@ -22,7 +23,8 @@ function isJetsonHost() {
   return false;
 }
 const JETSON_ONLY = String(process.env.JETSON_ONLY || "false").toLowerCase() === "true";
-if (JETSON_ONLY && !isJetsonHost()) {
+const IS_JETSON = String(process.env.IS_JETSON || "false").toLowerCase() === "true";
+if (JETSON_ONLY && !(isJetsonHost() || IS_JETSON)) {
   console.error("JETSON_ONLY=true: refusing to start on non-Jetson host");
   process.exit(1);
 }
