@@ -478,8 +478,14 @@ app.post("/api/debug/run", async (req, res) => {
       `${CONFIGS_DIR}:${CONFIGS_DIR}`,
       "/data/hls:/app/public/video"
     ];
+    const env = [
+      `DISPLAY=${process.env.DISPLAY || ":0"}`,
+      "CUDA_VER=10.2",
+      "PLATFORM_TEGRA=1",
+      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+    ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
     const created = await dockerRequest("POST", "/containers/create?name=ds_debug", body);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
     const start = await dockerRequest("POST", "/containers/ds_debug/start");
