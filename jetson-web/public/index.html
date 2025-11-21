@@ -244,8 +244,15 @@
         <button onclick="startDsApp()">Run</button>
         <button onclick="stopDsApp()">Stop</button>
         <button onclick="logsDsApp()">Logs</button>
+        <button onclick="startAutoDsLogs()">Auto Start</button>
+        <button onclick="stopAutoDsLogs()">Auto Stop</button>
       </div>
       <div class="status" id="dsStatus"></div>
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="dsLogsFilter" /> Filter important</label>
+        <input id="dsLogsQuery" placeholder="Search text" />
+        <button onclick="searchDsLogs()">Search</button>
+      </div>
       <div class="status" id="dsLogs" style="white-space:pre-wrap"></div>
     </div>
     <div class="card">
@@ -434,7 +441,10 @@
     async function loadSamples() { try { const r = await fetch('/api/dsapp/samples'); const j = await r.json(); const sel = document.getElementById('dsSample'); sel.innerHTML = ''; (j.samples||[]).forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.label; sel.appendChild(o); }); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     async function startDsApp() { const sample = document.getElementById('dsSample').value || 'test1'; const image = document.getElementById('dsImage').value || ''; const text = document.getElementById('dsUris').value || ''; const uris = text.split('\n').map(s => s.trim()).filter(Boolean); const autoEngine = !!document.getElementById('dsAutoEngine').checked; try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample, uris, image, autoEngine }) }); const j = await r.json(); document.getElementById('dsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     async function stopDsApp() { try { const r = await fetch('/api/dsapp/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('dsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
-    async function logsDsApp() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); document.getElementById('dsLogs').textContent = t; } catch (e) { document.getElementById('dsLogs').textContent = e.message; } }
+    async function logsDsApp() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const f = document.getElementById('dsLogsFilter'); if (f && f.checked) { const lines = t.split(/\r?\n/); const re = /(NvDsInfer|nvinfer|ERROR|PLAYING|pipeline)/i; document.getElementById('dsLogs').textContent = lines.filter(l => re.test(l)).join('\n'); } else { document.getElementById('dsLogs').textContent = t; } } catch (e) { document.getElementById('dsLogs').textContent = e.message; } }
+    async function searchDsLogs() { try { const q = document.getElementById('dsLogsQuery').value || ''; if (!q) { return logsDsApp(); } const r = await fetch('/api/dsapp/logs/search?q=' + encodeURIComponent(q) + '&tail=1200'); const t = await r.text(); document.getElementById('dsLogs').textContent = t; } catch (e) { document.getElementById('dsLogs').textContent = e.message; } }
+    function startAutoDsLogs() { try { if (window.dsLogsTimer) { clearInterval(window.dsLogsTimer); } window.dsLogsTimer = setInterval(logsDsApp, 1000); } catch {} }
+    function stopAutoDsLogs() { try { if (window.dsLogsTimer) { clearInterval(window.dsLogsTimer); window.dsLogsTimer = null; } } catch {} }
     async function loadIni() { try { const p = document.getElementById('iniPath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('iniText').value = j.content; document.getElementById('iniStatus').textContent = 'Loaded'; } else { document.getElementById('iniStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     async function saveIni() { try { const p = document.getElementById('iniPath').value || ''; const content = document.getElementById('iniText').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('iniStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }
     async function listIni() { try { const r = await fetch('/api/configs/list?dir=' + encodeURIComponent('/app/configs/')); const j = await r.json(); const sel = document.getElementById('iniList'); sel.innerHTML = ''; if (j && Array.isArray(j.files)) { const prefix = (j && j.dir) || '/app/configs/'; (j.files||[]).forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p.startsWith(prefix) ? p.slice(prefix.length) : p.replace('/app/configs/',''); sel.appendChild(o); }); document.getElementById('iniStatus').textContent = 'Found ' + (j.files||[]).length + ' INIs'; } else { document.getElementById('iniStatus').textContent = (j && j.error) ? j.error : 'No INIs found'; } } catch (e) { document.getElementById('iniStatus').textContent = e.message; } }

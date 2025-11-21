@@ -96,17 +96,30 @@ app.delete("/api/message", (_req, res) => {
 });
 
 import http from "http";
+import https from "https";
 
-function dockerRequest(method, path, body) {
+const DOCKER_HOST_HTTP = process.env.DOCKER_HOST_HTTP || "";
+
+function dockerRequest(method, reqPath, body) {
   return new Promise((resolve) => {
-    const opts = { socketPath: "/var/run/docker.sock", path, method, headers: {} };
+    let opts = { method, headers: {} };
+    let requester = http;
+    if (DOCKER_HOST_HTTP) {
+      try {
+        const u = new URL(DOCKER_HOST_HTTP);
+        requester = u.protocol === "https:" ? https : http;
+        opts = { protocol: u.protocol, hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80), path: reqPath, method, headers: {} };
+      } catch {}
+    } else {
+      opts = { socketPath: "/var/run/docker.sock", path: reqPath, method, headers: {} };
+    }
     let payload = null;
     if (body) {
       payload = Buffer.from(JSON.stringify(body));
       opts.headers["Content-Type"] = "application/json";
       opts.headers["Content-Length"] = String(payload.length);
     }
-    const req = http.request(opts, (resp) => {
+    const req = requester.request(opts, (resp) => {
       let data = "";
       resp.on("data", (c) => { data += c; });
       resp.on("end", () => { resolve({ statusCode: resp.statusCode || 0, body: data }); });
@@ -447,7 +460,8 @@ app.get("/api/admin/env", (_req, res) => {
     JETSON_ONLY,
     IS_JETSON: String(process.env.IS_JETSON || "false").toLowerCase() === "true",
     MEDIA_DIR,
-    DS_IMAGE
+    DS_IMAGE,
+    DOCKER_HOST_HTTP
   });
 });
 
@@ -647,6 +661,29 @@ app.post("/api/dsapp/stop", async (_req, res) => {
 app.get("/api/dsapp/logs", async (_req, res) => {
   const logs = await dockerRequest("GET", "/containers/ds_app/logs?stdout=1&stderr=1&tail=200");
   res.type("text/plain").send(logs.body || "");
+});
+
+app.get("/api/dsapp/logs/search", async (req, res) => {
+  try {
+    const tail = Math.max(1, Math.min(Number(req.query.tail || 600), 5000));
+    const logs = await dockerRequest("GET", `/containers/ds_app/logs?stdout=1&stderr=1&tail=${tail}`);
+    const text = logs.body || "";
+    const q = String(req.query.q || "");
+    const defaultKeywords = "NvDsInfer|nvinfer|ERROR|PLAYING|pipeline";
+    const kw = String(req.query.keywords || defaultKeywords);
+    let out = text;
+    if (q) {
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(esc, "i");
+      out = text.split(/\r?\n/).filter(l => re.test(l)).join("\n");
+    } else if (kw) {
+      const re = new RegExp(kw, "i");
+      out = text.split(/\r?\n/).filter(l => re.test(l)).join("\n");
+    }
+    res.type("text/plain").send(out);
+  } catch (e) {
+    res.status(500).type("text/plain").send(String(e.message || e));
+  }
 });
 
 app.get("/api/configs/read", async (req, res) => {
