@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "DeepStream Web API",
+    "version": "0.1.0"
+  },
+  "servers": [
+    { "url": "http://localhost:5000" },
+    { "url": "http://192.168.1.200" }
+  ],
+  "paths": {
+    "/api/dsapp/samples": {
+      "get": {
+        "summary": "List DS samples",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "samples": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" } } } } } } } } } }
+      }
+    },
+    "/api/dsapp/start": {
+      "post": {
+        "summary": "Start DeepStream app",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DsAppStartRequest" } } } },
+        "responses": { "200": { "description": "Started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DsAppStartResponse" } } } }, "400": { "description": "Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/api/dsapp/stop": { "post": { "summary": "Stop DeepStream app", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/dsapp/logs": { "get": { "summary": "Tail DS app logs", "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } } } },
+    "/api/dsapp/logs/search": {
+      "get": {
+        "summary": "Search DS app logs",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "keywords", "in": "query", "schema": { "type": "string" } },
+          { "name": "tail", "in": "query", "schema": { "type": "integer", "default": 600 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } }
+      }
+    },
+    "/api/hls/start": {
+      "post": { "summary": "Start HLS pipeline", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HlsStartRequest" } } } }, "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HlsStartResponse" } } } } } }
+    },
+    "/api/hls/stop": { "post": { "summary": "Stop HLS", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/hls/clear": { "post": { "summary": "Clear HLS outputs", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/hls/logs": { "get": { "summary": "Tail HLS logs", "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } } } },
+    "/api/rtsp/start": { "post": { "summary": "Start RTSP server", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "uri": { "type": "string" } } } } } } } } },
+    "/api/rtsp/stop": { "post": { "summary": "Stop RTSP", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/rtsp/logs": { "get": { "summary": "RTSP logs", "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } } } },
+    "/api/configs/read": {
+      "get": { "summary": "Read config file", "parameters": [ { "name": "path", "in": "query", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } } } } } } } }
+    },
+    "/api/configs/save": { "post": { "summary": "Save config file", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigSaveRequest" } } } }, "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/configs/list": { "get": { "summary": "List config files", "parameters": [ { "name": "dir", "in": "query", "schema": { "type": "string" } }, { "name": "ext", "in": "query", "schema": { "type": "string", "enum": ["ini","txt","cfg"] } } ], "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "dir": { "type": "string" }, "files": { "type": "array", "items": { "type": "string" } } } } } } } } } },
+    "/api/snapshot/start": { "post": { "summary": "Start snapshot", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnapshotStartRequest" } } } }, "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "pipeline": { "type": "string" }, "count": { "type": "integer" } } } } } } } } },
+    "/api/snapshot/stop": { "post": { "summary": "Stop snapshot", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/snapshot/clear": { "delete": { "summary": "Clear snapshots", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } } },
+    "/api/snapshot/logs": { "get": { "summary": "Snapshot logs", "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } } } },
+    "/api/snapshot/list": { "get": { "summary": "List snapshot files", "parameters": [ { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } } ], "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "files": { "type": "array", "items": { "type": "string" } } } } } } } } } },
+    "/api/admin/env": { "get": { "summary": "Environment info", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } } } },
+    "/api/admin/containers": { "get": { "summary": "Container states", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } } } },
+    "/api/media/list": { "get": { "summary": "List media", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "dir": { "type": "string" }, "files": { "type": "array", "items": { "type": "string" } } } } } } } } } },
+    "/api/message": {
+      "post": { "summary": "Send message", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"] } } } }, "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } },
+      "get": { "summary": "List messages", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "messages": { "type": "array", "items": { "type": "object", "properties": { "text": { "type": "string" }, "ts": { "type": "integer" } } } } } } } } } } },
+      "delete": { "summary": "Clear messages", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } }
+    },
+    "/api/stream": { "post": { "summary": "Proxy create stream", "responses": { "200": { "description": "OK" } } } },
+    "/api/stream/{id}": { "delete": { "summary": "Proxy delete stream", "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "OK" } } } },
+    "/api/infer": { "put": { "summary": "Proxy infer update", "responses": { "200": { "description": "OK" } } } },
+    "/api/roi": { "post": { "summary": "Proxy ROI", "responses": { "200": { "description": "OK" } } } },
+    "/api/health": { "get": { "summary": "Proxy health", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } } } }
+  },
+  "components": {
+    "schemas": {
+      "OkResponse": { "type": "object", "properties": { "ok": { "type": "boolean" } } },
+      "ErrorResponse": { "type": "object", "properties": { "ok": { "type": "boolean" }, "error": { "type": "string" } } },
+      "DsAppStartRequest": {
+        "type": "object",
+        "properties": { "sample": { "type": "string" }, "uris": { "type": "array", "items": { "type": "string" } }, "image": { "type": "string" }, "autoEngine": { "type": "boolean" } },
+        "required": ["sample"]
+      },
+      "DsAppStartResponse": { "type": "object", "properties": { "ok": { "type": "boolean" }, "cmd": { "type": "string" }, "image": { "type": "string" }, "error": { "type": "string" } } },
+      "HlsStartRequest": { "type": "object", "properties": { "uri": { "type": "string" }, "hls_time": { "type": "integer" }, "hls_list_size": { "type": "integer" } }, "required": ["uri"] },
+      "HlsStartResponse": { "type": "object", "properties": { "ok": { "type": "boolean" }, "pipeline": { "type": "string" }, "playlist": { "type": "string" } } },
+      "ConfigSaveRequest": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } }, "required": ["path","content"] },
+      "SnapshotStartRequest": { "type": "object", "properties": { "uri": { "type": "string" }, "rate": { "type": "integer" } }, "required": ["uri"] }
+    }
+  }
+}

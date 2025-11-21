@@ -1,23 +1,24 @@
 version: "3.8"
 services:
   web:
-    image: jetson-web:local
+    image: node:18
+    container_name: jetson-web
+    working_dir: /app
+    network_mode: host
     environment:
-      - DEEPSTREAM_URL=http://192.168.1.200:8080/api/v1
+      - PORT=80
+      - JETSON_ONLY=true
       - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
       - DS_APP_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
-      - IS_JETSON=true
-    ports:
-      - "80:80"
     restart: unless-stopped
+    command: bash -lc "npm install && node server.js"
     volumes:
+      - ./jetson-web:/app
+      - /var/run/docker.sock:/var/run/docker.sock
       - /data/hls:/app/public/video
       - /data/hls:/data/hls
-      - /data/videos:/app/public/media
       - /data/videos:/data/videos
       - /data/ds/configs:/app/configs
       - /data/ds/configs:/data/ds/configs
-      - ./jetson-web/server.js:/app/server.js
-      - ./jetson-web/public/index.html:/app/public/index.html
-      - /var/run/docker.sock:/var/run/docker.sock
       - /data/snapshots:/data/snapshots
+      - /opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl:/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl

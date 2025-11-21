@@ -3,6 +3,7 @@ import axios from "axios";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import swaggerUi from "swagger-ui-express";
 import os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,6 +32,17 @@ let messages = [];
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+let openapiDoc = null;
+try {
+  const specPath = path.join(__dirname, "openapi.json");
+  const raw = fs.readFileSync(specPath, "utf8");
+  openapiDoc = JSON.parse(raw);
+} catch {}
+if (openapiDoc) {
+  app.get("/api/openapi.json", (_req, res) => { res.json(openapiDoc); });
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openapiDoc));
+}
 
 app.post("/api/stream", async (req, res) => {
   try {
