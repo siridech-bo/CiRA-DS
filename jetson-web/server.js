@@ -477,6 +477,7 @@ app.post("/api/debug/run", async (req, res) => {
       `${MEDIA_DIR}:${MEDIA_DIR}`,
       `${CONFIGS_DIR}:${CONFIGS_DIR}`,
       "/data/ds/configs:/data/ds/configs",
+      "/data/weight_config:/data/weight_config",
       "/app/configs:/host_app_configs",
       "/data/hls:/app/public/video"
     ];
@@ -484,7 +485,10 @@ app.post("/api/debug/run", async (req, res) => {
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
-      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+      "GST_PLUGIN_PATH=/host_app_configs/plugins",
+      "GST_PLUGIN_SYSTEM_PATH=/host_app_configs/plugins",
+      "GST_PLUGIN_PATH_1_0=/host_app_configs/plugins"
     ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
     const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
