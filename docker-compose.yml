@@ -5,7 +5,7 @@ services:
     container_name: openapi-spec
     restart: unless-stopped
     network_mode: host
-    command: bash -lc "python3 -m http.server 80 --directory /usr/share/openapi"
+    command: bash -lc "python3 -m http.server 8080 --directory /usr/share/openapi"
     volumes:
       - ./jetson-web/openapi.json:/usr/share/openapi/api/openapi.json:ro
   web:
