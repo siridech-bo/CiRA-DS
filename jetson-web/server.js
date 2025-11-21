@@ -615,7 +615,25 @@ app.post("/api/dsapp/start", async (req, res) => {
   }
   const start = await dockerRequest("POST", "/containers/ds_app/start");
   if (!(start.statusCode >= 200 && start.statusCode < 300)) {
-    return res.status(500).json({ ok: false, cmd, image, error: start.body || "start_failed" });
+    let stateError = null;
+    let logsTail = "";
+    let matchedErrors = [];
+    try {
+      const info = await dockerRequest("GET", "/containers/ds_app/json");
+      const obj = JSON.parse(info.body);
+      stateError = (obj && obj.State && obj.State.Error) || null;
+    } catch {}
+    try {
+      const logs = await dockerRequest("GET", "/containers/ds_app/logs?stdout=1&stderr=1&tail=600");
+      logsTail = logs.body || "";
+      try {
+        const lines = logsTail.split(/\r?\n/);
+        const patterns = [/NVDSINFER_CUSTOM_LIB_FAILED/i, /NvDsInfer/i, /nvinfer/i, /custom lib/i, /error/i, /failed/i, /No such file/i, /cannot open/i];
+        matchedErrors = lines.filter(l => patterns.some(p => p.test(l)));
+        matchedErrors = matchedErrors.slice(-100);
+      } catch {}
+    } catch {}
+    return res.status(500).json({ ok: false, cmd, image, error: start.body || "start_failed", stateError, logsTail, matchedErrors });
   }
   res.json({ ok: true, cmd, image });
 });
