@@ -572,7 +572,7 @@ app.post("/api/dspython/start", async (req, res) => {
     const parts = [];
     if (shouldInstall) {
       parts.push("apt-get update");
-      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gst-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev");
+      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev");
     }
     parts.push("python3 -c \"import gi; gi.require_version('Gst','1.0'); from gi.repository import Gst; import sys; print('GI_OK'); print(sys.version)\"");
     parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
