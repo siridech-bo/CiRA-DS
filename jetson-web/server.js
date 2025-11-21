@@ -639,6 +639,7 @@ app.post("/api/dsapp/start", async (req, res) => {
     "/data/ds/configs:/data/ds/configs",
     "/data/weight_config:/data/weight_config",
     "/app/configs:/host_app_configs",
+    "/app/configs/plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0/deepstream",
     "/data/hls:/app/public/video",
     "/data/videos:/data/videos"
   ];
@@ -653,7 +654,10 @@ app.post("/api/dsapp/start", async (req, res) => {
     `DISPLAY=${process.env.DISPLAY || ":0"}`,
     "CUDA_VER=10.2",
     "PLATFORM_TEGRA=1",
-    "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+    "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+    "GST_PLUGIN_PATH=/host_app_configs/plugins",
+    "GST_PLUGIN_SYSTEM_PATH=/host_app_configs/plugins",
+    "GST_PLUGIN_PATH_1_0=/host_app_configs/plugins"
   ];
   const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
   let created = await dockerRequest("POST", "/containers/create?name=ds_app", body);
