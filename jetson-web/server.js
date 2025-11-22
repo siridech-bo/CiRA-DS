@@ -690,13 +690,13 @@ app.post("/api/dspython/exec", async (req, res) => {
       const st = JSON.parse(info.body || "{}" ).State || null;
       if (!st || !st.Running) return res.status(400).json({ error: "ds_python not running" });
     } catch {}
-    const createBody = { AttachStdout: true, AttachStderr: true, Tty: false, Cmd: ["bash","-lc", cmd] };
+    const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
     let id = "";
     try { id = JSON.parse(created.body || "{}" ).Id || ""; } catch {}
     if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
-    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: false });
+    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
     if (waitMs > 0) { await new Promise(r => setTimeout(r, waitMs)); }
     res.type("text/plain").send(started.body || "");
