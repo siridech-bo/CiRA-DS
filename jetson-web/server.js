@@ -699,7 +699,8 @@ app.post("/api/dspython/exec", async (req, res) => {
     const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
     if (waitMs > 0) { await new Promise(r => setTimeout(r, waitMs)); }
-    res.type("text/plain").send(started.body || "");
+    const encoded = Buffer.from(started.body || "", "binary").toString("base64");
+    res.type("text/plain").send(encoded);
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
