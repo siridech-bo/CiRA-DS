@@ -570,6 +570,7 @@ app.post("/api/dspython/start", async (req, res) => {
   try {
     const shouldInstall = !!(req.body && req.body.install);
     const useGit = !!(req.body && req.body.useGit);
+    const image = (req.body && req.body.image) || DS_IMAGE;
     const parts = [];
     if (shouldInstall) {
       parts.push("apt-get update");
@@ -604,7 +605,7 @@ app.post("/api/dspython/start", async (req, res) => {
       "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
     ];
     await dockerRequest("DELETE", "/containers/ds_python?force=true");
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
     const created = await dockerRequest("POST", "/containers/create?name=ds_python", body);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
     const start = await dockerRequest("POST", "/containers/ds_python/start");
