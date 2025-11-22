@@ -729,10 +729,33 @@ app.post("/api/docker/save", async (req, res) => {
     let outPath = String((req.body && req.body.path) || "").trim();
     if (!name) return res.status(400).json({ error: "name required" });
     if (!outPath) outPath = path.join("/data/ds/configs", `${name.replace(/[:/]/g, "_")}.tar`);
-    const r = await dockerRequest("GET", `/images/${encodeURIComponent(name)}/get`);
-    if (!(r.statusCode >= 200 && r.statusCode < 300)) return res.status(500).json({ error: "save_failed", detail: r.body, status: r.statusCode });
-    await fs.promises.writeFile(outPath, r.body || Buffer.from([]));
-    return res.json({ ok: true, path: outPath, size: (r.body ? Buffer.byteLength(r.body) : 0) });
+    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+    const reqPath = `/images/${encodeURIComponent(name)}/get`;
+    let opts = { method: "GET", headers: {} };
+    let requester = http;
+    if (DOCKER_HOST_HTTP) {
+      try {
+        const u = new URL(DOCKER_HOST_HTTP);
+        requester = u.protocol === "https:" ? https : http;
+        opts = { protocol: u.protocol, hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80), path: reqPath, method: "GET", headers: {} };
+      } catch {}
+    } else {
+      opts = { socketPath: "/var/run/docker.sock", path: reqPath, method: "GET", headers: {} };
+    }
+    const file = fs.createWriteStream(outPath);
+    const req2 = requester.request(opts, (resp) => {
+      if (!(resp.statusCode >= 200 && resp.statusCode < 300)) {
+        let errText = "";
+        resp.on("data", (c) => { errText += c; });
+        resp.on("end", () => { try { file.close(); } catch {} res.status(500).json({ error: "save_failed", detail: errText, status: resp.statusCode }); });
+        return;
+      }
+      resp.pipe(file);
+      file.on("finish", () => { try { file.close(); } catch {} res.json({ ok: true, path: outPath }); });
+      file.on("error", (fe) => { try { file.close(); } catch {} res.status(500).json({ error: String(fe && fe.message || fe) }); });
+    });
+    req2.on("error", (e) => { try { file.close(); } catch {} res.status(500).json({ error: String(e && e.message || e) }); });
+    req2.end();
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
