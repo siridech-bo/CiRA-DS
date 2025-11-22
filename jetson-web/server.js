@@ -615,9 +615,10 @@ app.post("/api/dspython/start", async (req, res) => {
   }
 });
 
-app.get("/api/dspython/logs", async (_req, res) => {
+app.get("/api/dspython/logs", async (req, res) => {
   try {
-    const logs = await dockerRequest("GET", "/containers/ds_python/logs?stdout=1&stderr=1&tail=1600");
+    const tail = Math.max(100, Math.min(20000, Number((req.query && req.query.tail) || 1600) || 1600));
+    const logs = await dockerRequest("GET", `/containers/ds_python/logs?stdout=1&stderr=1&tail=${tail}`);
     res.type("text/plain").send(logs.body || "");
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
