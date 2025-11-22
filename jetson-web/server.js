@@ -624,7 +624,7 @@ app.post("/api/dspython/start", async (req, res) => {
       parts.push("cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps && git submodule update --init || true");
       parts.push("mkdir -p /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build");
       parts.push("cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build && cmake .. -DPYTHON_MAJOR_VERSION=3 -DPYTHON_MINOR_VERSION=6 -DPIP_PLATFORM=linux_aarch64 -DDS_PATH=/opt/nvidia/deepstream/deepstream-6.0/ && make -j$(nproc) || echo PYDS_CMAKE_FAILED");
-      parts.push("python3 -c 'import glob,subprocess,sys; import os; ws=glob.glob("/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build/pyds-*.whl"); print("WHEELS", ws); sys.exit(0 if (len(ws)>0 and subprocess.call(["pip3","install",ws[0]])==0) else 1)' || echo PYDS_WHEEL_INSTALL_FAILED");
+      parts.push("python3 -c \"import glob,subprocess,sys; import os; ws=glob.glob('/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build/pyds-*.whl'); print('WHEELS', ws); sys.exit(0 if (len(ws)>0 and subprocess.call(['pip3','install',ws[0]])==0) else 1)\" || echo PYDS_WHEEL_INSTALL_FAILED");
     } else {
       parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
       parts.push("if [ -f /opt/nvidia/deepstream/deepstream-6.0/lib/setup.py ]; then cd /opt/nvidia/deepstream/deepstream-6.0/lib && python3 setup.py install || echo SETUPPY_FAILED; fi");
