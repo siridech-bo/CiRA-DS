@@ -476,6 +476,8 @@ app.post("/api/debug/run", async (req, res) => {
   try {
     const cmd = String((req.body && req.body.cmd) || "").trim();
     if (!cmd) return res.status(400).json({ error: "cmd required" });
+    const image = String((req.body && req.body.image) || DS_IMAGE);
+    const waitMs = Math.max(0, Math.min(1800000, Number((req.body && req.body.wait_ms) || 180000)));
     const binds = [
       `${MEDIA_DIR}:${MEDIA_DIR}`,
       `${CONFIGS_DIR}:${CONFIGS_DIR}`,
@@ -491,13 +493,13 @@ app.post("/api/debug/run", async (req, res) => {
       "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
     ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
     const created = await dockerRequest("POST", "/containers/create?name=ds_debug", body);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
     const start = await dockerRequest("POST", "/containers/ds_debug/start");
     if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
-    await new Promise(r => setTimeout(r, 180000));
-    const logs = await dockerRequest("GET", "/containers/ds_debug/logs?stdout=1&stderr=1&tail=800");
+    await new Promise(r => setTimeout(r, waitMs));
+    const logs = await dockerRequest("GET", "/containers/ds_debug/logs?stdout=1&stderr=1&tail=20000");
     await dockerRequest("POST", "/containers/ds_debug/stop");
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
     res.type("text/plain").send(logs.body || "");
