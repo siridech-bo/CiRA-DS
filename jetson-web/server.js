@@ -630,6 +630,8 @@ app.post("/api/dspython/start", async (req, res) => {
       parts.push("if [ -f /opt/nvidia/deepstream/deepstream-6.0/lib/setup.py ]; then cd /opt/nvidia/deepstream/deepstream-6.0/lib && python3 setup.py install || echo SETUPPY_FAILED; fi");
     }
     parts.push("pip3 install --no-cache-dir pyds_ext || echo PYDS_EXT_FAILED");
+    parts.push("pip3 install --no-cache-dir cuda-python || echo CUDA_PY_FAILED");
+    parts.push("python3 -c \"import cuda; import sys; print('CUDA_PY_OK', getattr(cuda,'__version__','?'))\"");
     parts.push("python3 -c \"import sys; ok=1;\ntry:\n import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\nexcept Exception as e:\n ok=0; print('PYDS_ERR', e)\nprint('DONE', ok)\"");
     const cmd = parts.join(" && ");
     const binds = [
