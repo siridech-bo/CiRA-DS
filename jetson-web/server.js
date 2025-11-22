@@ -573,12 +573,17 @@ app.post("/api/dspython/start", async (req, res) => {
     const parts = [];
     if (shouldInstall) {
       parts.push("apt-get update");
-      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev" + (useGit ? " git" : ""));
+      parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev build-essential pkg-config cmake libtool autoconf automake m4" + (useGit ? " git" : ""));
     }
     parts.push("python3 -c \"import gi; gi.require_version('Gst','1.0'); from gi.repository import Gst; import sys; print('GI_OK'); print(sys.version)\"");
     if (useGit) {
-      parts.push("pip3 install --upgrade pip setuptools wheel");
+      parts.push("pip3 install --upgrade pip setuptools wheel || true");
       parts.push("pip3 install --no-cache-dir git+https://github.com/NVIDIA-AI-IOT/deepstream_python_apps.git#subdirectory=bindings || echo PYDS_INSTALL_FAILED");
+      parts.push("mkdir -p /opt/nvidia/deepstream/deepstream-6.0/sources && cd /opt/nvidia/deepstream/deepstream-6.0/sources && (test -d deepstream_python_apps || git clone https://github.com/NVIDIA-AI-IOT/deepstream_python_apps.git)");
+      parts.push("cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps && git submodule update --init || true");
+      parts.push("mkdir -p /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build");
+      parts.push("cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build && cmake .. -DPYTHON_MAJOR_VERSION=3 -DPYTHON_MINOR_VERSION=6 -DPIP_PLATFORM=linux_aarch64 -DDS_PATH=/opt/nvidia/deepstream/deepstream-6.0/ && make -j$(nproc) || echo PYDS_CMAKE_FAILED");
+      parts.push("python3 -c 'import glob,subprocess,sys; import os; ws=glob.glob("/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build/pyds-*.whl"); print("WHEELS", ws); sys.exit(0 if (len(ws)>0 and subprocess.call(["pip3","install",ws[0]])==0) else 1)' || echo PYDS_WHEEL_INSTALL_FAILED");
     } else {
       parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
     }
