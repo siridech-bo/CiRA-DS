@@ -115,7 +115,7 @@
     async function connectSource() { try { let uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; if (!uri) { document.getElementById('inputStatus').textContent = 'No source'; return; } const id = deriveStreamId(uri); const payload = { stream_id: id, uri, source_id: 0 }; const r = await fetch('/api/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Connected • ' + id; try { localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
     async function disconnectSource() { try { const id = localStorage.getItem('currentStreamId') || 'stream_0'; const r = await fetch('/api/stream/' + encodeURIComponent(id), { method: 'DELETE' }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Disconnected • ' + id; } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
     function goToPipeline() { try { const uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; const id = deriveStreamId(uri); localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} setTab('pipeline'); try { const el = document.getElementById('iniPath'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); } catch{} }
-    function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-pipeline-python','tab-output','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
+    function setTab(name) { const ids = ['tab-input','tab-pipeline','tab-output','tab-utility']; ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = id === 'tab-'+name ? '' : 'none'; }); try { location.hash = '#'+name; } catch {} }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
   </script>
@@ -124,7 +124,6 @@
   <div class="row" id="tabbar">
     <button onclick="setTab('input')">Input</button>
     <button onclick="setTab('pipeline')">Process Pipeline</button>
-    <button onclick="setTab('pipeline-python')">Process Pipeline Python</button>
     <button onclick="setTab('output')">Output</button>
     <button onclick="setTab('utility')">Utility</button>
   </div>
@@ -155,16 +154,6 @@
       </div>
       <div class="status" id="rtspStatus"></div>
       <div class="status">Default: rtsp://127.0.0.1:8554/ds-test</div>
-    </div>
-    <div class="card">
-      <h2>Python RTSP Out</h2>
-      <input id="pythonRtspUrl" placeholder="rtsp://host:8554/ds-stream" />
-      <div class="row">
-        <button onclick="showPythonRtspUrl()">Set URL</button>
-        <button onclick="copyPythonRtspUrl()">Copy URL</button>
-        <button onclick="setTab('pipeline-python')">Go to Python Tab</button>
-      </div>
-      <div class="status" id="pythonRtspStatus"></div>
     </div>
     <div class="card">
       <h2>JSON Output</h2>
@@ -258,6 +247,11 @@
         <button onclick="startAutoDsLogs()">Auto Start</button>
         <button onclick="stopAutoDsLogs()">Auto Stop</button>
       </div>
+      <div class="row">
+        <button onclick="runDsPythonRtsp()">Run Python RTSP Out</button>
+        <button onclick="stopDsPythonRtsp()">Stop Python</button>
+        <button onclick="logsDsPythonRtsp()">Python Logs</button>
+      </div>
       <div class="status" id="dsStatus"></div>
       <div class="row">
         <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="dsLogsFilter" /> Filter important</label>
@@ -314,22 +308,6 @@
         <button onclick="saveLabels()">Save</button>
       </div>
       <div class="status" id="labelsStatus"></div>
-    </div>
-  </div>
-  <div class="grid" id="tab-pipeline-python" style="display:none">
-    <div class="card">
-      <h2>DeepStream Python RTSP-out</h2>
-      <input id="pySrcUri" placeholder="rtsp://... or /media/file.mp4" />
-      <div class="row">
-        <button onclick="useInputSourceForPy()">Use Input Source</button>
-      </div>
-      <div class="row">
-        <button onclick="runDsPythonRtsp()">Run</button>
-        <button onclick="stopDsPythonRtsp()">Stop</button>
-        <button onclick="logsDsPythonRtsp()">Logs</button>
-      </div>
-      <div class="status" id="pyRtspStatus"></div>
-      <div class="status">Output: <span id="pyRtspOutUri"></span></div>
     </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
@@ -621,12 +599,8 @@
     async function refreshJsonLogs() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const lines = t.split(/\r?\n/).filter(x => /\{.*\}/.test(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
     async function loadAdminEnv() { try { const r = await fetch('/api/admin/env'); const j = await r.json(); document.getElementById('adminEnv').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminEnv').textContent = e.message; } }
     async function loadAdminContainers() { try { const r = await fetch('/api/admin/containers'); const j = await r.json(); document.getElementById('adminContainers').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminContainers').textContent = e.message; } }
-    function computePythonRtspUri() { try { const host = location.hostname || '127.0.0.1'; return 'rtsp://' + host + ':8554/ds-stream'; } catch { return 'rtsp://127.0.0.1:8554/ds-stream'; } }
-    function showPythonRtspUrl() { const u = computePythonRtspUri(); const el = document.getElementById('pythonRtspUrl'); if (el) el.value = u; const out = document.getElementById('pythonRtspStatus'); if (out) out.textContent = 'URL: ' + u; }
-    async function copyPythonRtspUrl() { try { const el = document.getElementById('pythonRtspUrl'); const v = el && el.value ? el.value : computePythonRtspUri(); await navigator.clipboard.writeText(v); const out = document.getElementById('pythonRtspStatus'); if (out) out.textContent = 'Copied: ' + v; } catch (e) { const out = document.getElementById('pythonRtspStatus'); if (out) out.textContent = e.message; } }
-    function useInputSourceForPy() { const src = (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || '').trim(); document.getElementById('pySrcUri').value = src; }
     function toDsPyUri(src) { const s = (src||'').trim(); if (!s) return ''; if (/^rtsp:\/\//i.test(s)) return s; if (s.startsWith('/media/')) return 'file:///data/videos/' + s.slice(7); if (s.startsWith('/video/')) return 'file:///app/public/video/' + s.slice(7); if (s.startsWith('/')) return 'file://' + s; return s; }
-    async function runDsPythonRtsp() { try { let src = document.getElementById('pySrcUri').value || (localStorage.getItem('currentSourceUri')||''); if (!src) { document.getElementById('pyRtspStatus').textContent = 'No source'; return; } const uri = toDsPyUri(src); const cmd = [
+    async function runDsPythonRtsp() { try { let src = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || (localStorage.getItem('currentSourceUri')||''); if (!src) { document.getElementById('dsStatus').textContent = 'No source'; return; } const uri = toDsPyUri(src); const cmd = [
         'cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out',
         'pkill -f deepstream_test1_rtsp_out.py || true',
         `nohup python3 deepstream_test1_rtsp_out.py "${uri}" > /app/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
@@ -634,12 +608,12 @@
       const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 1000 }) });
       const t = await r.text();
       let out = ''; try { out = atob(t.trim()); } catch { out = t; }
-      document.getElementById('pyRtspStatus').textContent = out || 'Started';
-      const u = computePythonRtspUri(); document.getElementById('pyRtspOutUri').textContent = u; const pru = document.getElementById('pythonRtspUrl'); if (pru) pru.value = u;
-    } catch (e) { document.getElementById('pyRtspStatus').textContent = e.message; }
+      const host = location.hostname || '127.0.0.1'; const u = 'rtsp://' + host + ':8554/ds-stream';
+      document.getElementById('dsStatus').textContent = (out || 'Started') + ' • ' + u;
+    } catch (e) { document.getElementById('dsStatus').textContent = e.message; }
     }
-    async function stopDsPythonRtsp() { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: 'pkill -f deepstream_test1_rtsp_out.py || true; echo STOPPED', wait_ms: 500 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('pyRtspStatus').textContent = out || 'Stopped'; } catch (e) { document.getElementById('pyRtspStatus').textContent = e.message; } }
-    async function logsDsPythonRtsp() { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: 'tail -n 200 /app/configs/ds_py_rtsp_out.txt || echo NO_LOG', wait_ms: 500 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('pyRtspStatus').textContent = out; } catch (e) { document.getElementById('pyRtspStatus').textContent = e.message; } }
+    async function stopDsPythonRtsp() { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: 'pkill -f deepstream_test1_rtsp_out.py || true; echo STOPPED', wait_ms: 500 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('dsStatus').textContent = out || 'Stopped'; } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
+    async function logsDsPythonRtsp() { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: 'tail -n 200 /app/configs/ds_py_rtsp_out.txt || echo NO_LOG', wait_ms: 500 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('dsStatus').textContent = out; } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     async function stopHls() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function logsHls() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('hlsStatus').textContent = t; } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
     async function clearHls() { try { const r = await fetch('/api/hls/clear', { method: 'POST' }); const j = await r.json(); document.getElementById('hlsStatus').textContent = JSON.stringify(j); try { const v = document.getElementById('video'); v.removeAttribute('src'); } catch {} } catch (e) { document.getElementById('hlsStatus').textContent = e.message; } }
