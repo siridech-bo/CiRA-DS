@@ -587,6 +587,7 @@ app.post("/api/dspython/start", async (req, res) => {
       parts.push("python3 -c 'import glob,subprocess,sys; import os; ws=glob.glob("/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings/build/pyds-*.whl"); print("WHEELS", ws); sys.exit(0 if (len(ws)>0 and subprocess.call(["pip3","install",ws[0]])==0) else 1)' || echo PYDS_WHEEL_INSTALL_FAILED");
     } else {
       parts.push("if [ -d /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps ]; then cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/bindings && pip3 install . || echo PYDS_INSTALL_FAILED; else echo DS_PY_SOURCES_MISSING; fi");
+      parts.push("if [ -f /opt/nvidia/deepstream/deepstream-6.0/lib/setup.py ]; then cd /opt/nvidia/deepstream/deepstream-6.0/lib && python3 setup.py install || echo SETUPPY_FAILED; fi");
     }
     parts.push("python3 -c \"import sys; ok=1;\ntry:\n import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\nexcept Exception as e:\n ok=0; print('PYDS_ERR', e)\nprint('DONE', ok)\"");
     const cmd = parts.join(" && ");
