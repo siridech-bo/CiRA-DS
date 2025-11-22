@@ -103,7 +103,7 @@ import https from "https";
 
 const DOCKER_HOST_HTTP = process.env.DOCKER_HOST_HTTP || "";
 
-function dockerRequest(method, reqPath, body) {
+function dockerRequest(method, reqPath, body, headers) {
   return new Promise((resolve) => {
     let opts = { method, headers: {} };
     let requester = http;
@@ -121,6 +121,9 @@ function dockerRequest(method, reqPath, body) {
       payload = Buffer.from(JSON.stringify(body));
       opts.headers["Content-Type"] = "application/json";
       opts.headers["Content-Length"] = String(payload.length);
+    }
+    if (headers && typeof headers === "object") {
+      for (const k of Object.keys(headers)) { opts.headers[k] = headers[k]; }
     }
     const req = requester.request(opts, (resp) => {
       let data = "";
@@ -511,6 +514,41 @@ app.get("/api/admin/containers", async (_req, res) => {
     try { out[n] = JSON.parse(info.body).State || null; } catch { out[n] = null; }
   }
   res.json(out);
+});
+
+app.post("/api/docker/pull", async (req, res) => {
+  try {
+    const image = (req.body && req.body.image) || "";
+    const tag = (req.body && req.body.tag) || "latest";
+    if (!image) return res.status(400).json({ error: "image required" });
+    const fromImage = encodeURIComponent(image);
+    const tagParam = encodeURIComponent(tag);
+    let headers = undefined;
+    const auth = (req.body && req.body.auth) || null;
+    if (auth && typeof auth === "object") {
+      const payload = Buffer.from(JSON.stringify(auth)).toString("base64");
+      headers = { "X-Registry-Auth": payload };
+    }
+    const r = await dockerRequest("POST", `/images/create?fromImage=${fromImage}&tag=${tagParam}`, undefined, headers);
+    if (r.statusCode >= 200 && r.statusCode < 300) return res.type("text/plain").send(r.body || "");
+    return res.status(500).json({ error: "pull_failed", detail: r.body, status: r.statusCode });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/docker/login", async (req, res) => {
+  try {
+    const username = (req.body && req.body.username) || "";
+    const password = (req.body && req.body.password) || "";
+    const serveraddress = (req.body && req.body.serveraddress) || "";
+    if (!username || !password || !serveraddress) return res.status(400).json({ error: "username, password, serveraddress required" });
+    const body = { username, password, serveraddress, email: (req.body && req.body.email) || "" };
+    const r = await dockerRequest("POST", "/auth", body);
+    return res.status(r.statusCode || 200).type("text/plain").send(r.body || "");
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
 });
 
 app.listen(PORT, () => {
