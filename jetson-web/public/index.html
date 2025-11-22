@@ -125,11 +125,14 @@
         const showEl = document.getElementById('tab-' + chosen);
         if (showEl) { showEl.style.display = 'grid'; }
         location.hash = '#' + chosen;
+        try { toggleDsPythonMonitor(chosen === 'pipeline-python'); } catch {}
       } catch {}
     }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
     window.addEventListener('hashchange', initTabs);
+    function toggleDsPythonMonitor(on) { try { if (window.dsPyMon) { clearInterval(window.dsPyMon); window.dsPyMon = null; } if (on) { updateDsPythonState(); window.dsPyMon = setInterval(updateDsPythonState, 2000); } } catch {} }
+    async function updateDsPythonState() { try { const r = await fetch('/api/dspython/logs?tail=2000'); const t = await r.text(); const el = document.getElementById('pyBackendState'); if (!el) return; if (!r.ok) { el.textContent = 'Backend: stopped'; return; } const gi = /GI_OK/i.test(t); const pyds = /PYDS_OK/i.test(t); const cuda = /CUDA_PY_OK/i.test(t); const ready = /DONE\s*1/i.test(t); const parts = []; parts.push('Backend: running'); parts.push(gi ? 'GI' : 'no GI'); parts.push(pyds ? 'pyds' : 'no pyds'); parts.push(cuda ? 'cuda' : 'no cuda'); parts.push(ready ? 'ready' : 'setup'); el.textContent = parts.join(' • '); } catch (e) { const el = document.getElementById('pyBackendState'); if (el) el.textContent = String(e); } }
   </script>
   </head>
 <body>
@@ -348,6 +351,7 @@
         <button onclick="stopDsPythonBackend()">Stop Backend</button>
         <button onclick="logsDsPythonBackend()">Backend Logs</button>
       </div>
+      <div class="status" id="pyBackendState"></div>
       <div class="status" id="pyRtspStatus"></div>
     </div>
   </div>
