@@ -699,8 +699,40 @@ app.post("/api/dspython/exec", async (req, res) => {
     const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
     if (waitMs > 0) { await new Promise(r => setTimeout(r, waitMs)); }
-    const encoded = Buffer.from(started.body || "", "binary").toString("base64");
-    res.type("text/plain").send(encoded);
+  const encoded = Buffer.from(started.body || "", "binary").toString("base64");
+  res.type("text/plain").send(encoded);
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/dspython/commit", async (req, res) => {
+  try {
+    const repo = String((req.body && req.body.repo) || "").trim();
+    const tag = String((req.body && req.body.tag) || "latest").trim();
+    if (!repo) return res.status(400).json({ error: "repo required" });
+    const info = await dockerRequest("GET", "/containers/ds_python/json");
+    let st = null;
+    try { st = JSON.parse(info.body || "{}" ).State || null; } catch {}
+    if (!st || !st.Running) return res.status(400).json({ error: "ds_python not running" });
+    const r = await dockerRequest("POST", `/commit?container=ds_python&repo=${encodeURIComponent(repo)}&tag=${encodeURIComponent(tag)}`);
+    if (r.statusCode >= 200 && r.statusCode < 300) return res.type("application/json").send(r.body || "{}");
+    return res.status(500).json({ error: "commit_failed", detail: r.body, status: r.statusCode });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/docker/save", async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || "").trim();
+    let outPath = String((req.body && req.body.path) || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (!outPath) outPath = path.join("/data/ds/configs", `${name.replace(/[:/]/g, "_")}.tar`);
+    const r = await dockerRequest("GET", `/images/${encodeURIComponent(name)}/get`);
+    if (!(r.statusCode >= 200 && r.statusCode < 300)) return res.status(500).json({ error: "save_failed", detail: r.body, status: r.statusCode });
+    await fs.promises.writeFile(outPath, r.body || Buffer.from([]));
+    return res.json({ ok: true, path: outPath, size: (r.body ? Buffer.byteLength(r.body) : 0) });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }

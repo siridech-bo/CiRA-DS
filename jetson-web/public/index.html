@@ -348,6 +348,7 @@
       </div>
       <div class="row">
         <button onclick="startDsPythonBackend()">Start Backend</button>
+        <button onclick="provisionDsPythonBackend()">Provision Backend (install)</button>
         <button onclick="stopDsPythonBackend()">Stop Backend</button>
         <button onclick="logsDsPythonBackend()">Backend Logs</button>
       </div>
@@ -656,7 +657,7 @@
       let out = ''; try { out = atob(t.trim()); } catch { out = t; }
       if (!r.ok || /ds_python not running/i.test(out)) {
         try {
-          const sr = await fetch('/api/dspython/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ install: true, useGit: true }) });
+          const sr = await fetch('/api/dspython/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ install: false, useGit: false }) });
           await sr.text();
           await new Promise(res => setTimeout(res, 6000));
           r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 1000 }) });
@@ -670,7 +671,8 @@
       const sEl=document.getElementById('dsStatus'); if (sEl) sEl.textContent = (out || 'Started') + ' • ' + u; const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = (out || 'Started') + ' • ' + u; const fEl=document.getElementById('pythonRtspUrl'); if (fEl) fEl.value = u; const pStat=document.getElementById('pythonRtspStatus'); if (pStat) pStat.textContent = 'URL: ' + u;
     } catch (e) { document.getElementById('dsStatus').textContent = e.message; }
     }
-    async function startDsPythonBackend() { try { const r = await fetch('/api/dspython/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ install: true, useGit: true }) }); const t = await r.text(); const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = t; } catch (e) { const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
+    async function startDsPythonBackend() { try { const r = await fetch('/api/dspython/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ install: false, useGit: false }) }); const t = await r.text(); const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = t; } catch (e) { const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
+    async function provisionDsPythonBackend() { try { const r = await fetch('/api/dspython/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ install: true, useGit: false }) }); const t = await r.text(); const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = t; } catch (e) { const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
     async function stopDsPythonBackend() { try { const r = await fetch('/api/dspython/stop', { method: 'POST' }); const j = await r.json(); const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = JSON.stringify(j); } catch (e) { const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
     async function logsDsPythonBackend() { try { const r = await fetch('/api/dspython/logs'); const t = await r.text(); const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = t; } catch (e) { const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
     async function stopDsPythonRtsp() { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: 'pkill -f deepstream_test1_rtsp_out.py || true; echo STOPPED', wait_ms: 500 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } const sEl=document.getElementById('dsStatus'); if (sEl) sEl.textContent = out || 'Stopped'; const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = out || 'Stopped'; } catch (e) { const sEl=document.getElementById('dsStatus'); if (sEl) sEl.textContent = e.message; const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent = e.message; } }
