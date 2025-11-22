@@ -115,7 +115,18 @@
     async function connectSource() { try { let uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; if (!uri) { document.getElementById('inputStatus').textContent = 'No source'; return; } const id = deriveStreamId(uri); const payload = { stream_id: id, uri, source_id: 0 }; const r = await fetch('/api/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Connected • ' + id; try { localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
     async function disconnectSource() { try { const id = localStorage.getItem('currentStreamId') || 'stream_0'; const r = await fetch('/api/stream/' + encodeURIComponent(id), { method: 'DELETE' }); const j = await r.json(); document.getElementById('inputStatus').textContent = 'Disconnected • ' + id; } catch (e) { document.getElementById('inputStatus').textContent = e.message; } }
     function goToPipeline() { try { const uri = document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || ''; const id = deriveStreamId(uri); localStorage.setItem('currentSourceUri', uri); localStorage.setItem('currentStreamId', id); localStorage.setItem('sourceType', uri.startsWith('/media/') ? 'file' : 'camera'); } catch {} setTab('pipeline'); try { const el = document.getElementById('iniPath'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); } catch{} }
-    function setTab(name) { try { const nodes = document.querySelectorAll('[id^="tab-"]'); nodes.forEach(el => { el.style.display = 'none'; }); const target = document.getElementById('tab-' + name); if (target) { target.style.display = 'grid'; } location.hash = '#' + name; } catch {} }
+    function setTab(name) {
+      try {
+        const nodes = document.querySelectorAll('[id^="tab-"]');
+        nodes.forEach(el => { el.style.display = 'none'; });
+        const target = document.getElementById('tab-' + name);
+        const fallback = document.getElementById('tab-pipeline') ? 'pipeline' : 'input';
+        const chosen = target ? name : fallback;
+        const showEl = document.getElementById('tab-' + chosen);
+        if (showEl) { showEl.style.display = 'grid'; }
+        location.hash = '#' + chosen;
+      } catch {}
+    }
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
     window.addEventListener('hashchange', initTabs);
