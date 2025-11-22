@@ -131,8 +131,8 @@
     function initTabs() { let t = (location.hash||'').replace('#',''); if (!t) t = 'input'; setTab(t); }
     window.addEventListener('load', () => { initTabs(); health(); loadMessages(); localHealth(); loadSamples(); });
     window.addEventListener('hashchange', initTabs);
-    function toggleDsPythonMonitor(on) { try { if (window.dsPyMon) { clearInterval(window.dsPyMon); window.dsPyMon = null; } if (on) { updateDsPythonState(); window.dsPyMon = setInterval(updateDsPythonState, 2000); } } catch {} }
-    async function updateDsPythonState() { try { const r = await fetch('/api/dspython/logs?tail=2000'); const t = await r.text(); const el = document.getElementById('pyBackendState'); if (!el) return; if (!r.ok) { el.textContent = 'Backend: stopped'; return; } const gi = /GI_OK/i.test(t); const pyds = /PYDS_OK/i.test(t); const cuda = /CUDA_PY_OK/i.test(t); const ready = /DONE\s*1/i.test(t); const parts = []; parts.push('Backend: running'); parts.push(gi ? 'GI' : 'no GI'); parts.push(pyds ? 'pyds' : 'no pyds'); parts.push(cuda ? 'cuda' : 'no cuda'); parts.push(ready ? 'ready' : 'setup'); el.textContent = parts.join(' • '); } catch (e) { const el = document.getElementById('pyBackendState'); if (el) el.textContent = String(e); } }
+    function toggleDsPythonMonitor(on) { try { if (window.dsPyMon) { clearInterval(window.dsPyMon); window.dsPyMon = null; } if (on) { updateDsPythonStatus(); window.dsPyMon = setInterval(updateDsPythonStatus, 2000); } } catch {} }
+    async function updateDsPythonStatus() { try { const r = await fetch('/api/dspython/logs?tail=2000'); const t = await r.text(); const stateEl = document.getElementById('pyBackendState'); if (!stateEl) return; if (!r.ok) { stateEl.textContent = 'Backend: stopped'; return; } const lines = t.split(/\r?\n/); const giOk = /GI_OK|python3-gi|gobject-introspection|gir1\.2-gstreamer-1\.0|gir1\.2-glib-2\.0/i.test(t); const pydsOk = /PYDS_OK|import\s+pyds\s+.*succeeded|pyds\s+built|Building\s+wheel\s+for\s+pyds|deepstream_python_apps/i.test(t); const cudaOk = /CUDA_PY_OK|nvinfer|libcuda|cuInit|cuda/i.test(t); const readyOk = /DONE\s*1|RTSP.*8554|ready/i.test(t); const installing = /apt-get|\bGet:\b|Setting up|Unpacking|Reading package lists/i.test(t); const building = /cmake|make\b|ninja\b|pip\s+install\s+pyds|build/i.test(t); const hasError = /(error|failed|No module named pyds|ImportError)/i.test(t); let phase = 'setup'; if (hasError) phase = 'error'; else if (readyOk) phase = 'ready'; else if (building) phase = 'building'; else if (installing) phase = 'installing'; const parts = []; parts.push('Backend: running'); parts.push(giOk ? 'GI' : 'no GI'); parts.push(pydsOk ? 'pyds' : 'no pyds'); parts.push(cudaOk ? 'cuda' : 'no cuda'); parts.push('phase:' + phase); stateEl.textContent = parts.join(' • '); const focus = /(GI_|PYDS_|CUDA_|DONE|python3-gi|gobject-introspection|pyds|cmake|make|ninja|DeepStream|nvinfer|cuda|error|failed|Setting up|Unpacking|\bGet:\b|Reading package lists)/i; const filtered = lines.filter(l => focus.test(l)).slice(-80); const logEl = document.getElementById('pyRtspStatus'); if (logEl) logEl.textContent = (filtered.length ? filtered : lines.slice(-80)).join('\n'); } catch (e) { const el = document.getElementById('pyBackendState'); if (el) el.textContent = String(e); } }
   </script>
   </head>
 <body>
@@ -352,7 +352,7 @@
         <button onclick="logsDsPythonBackend()">Backend Logs</button>
       </div>
       <div class="status" id="pyBackendState"></div>
-      <div class="status" id="pyRtspStatus"></div>
+      <div class="status" id="pyRtspStatus" style="white-space:pre-wrap"></div>
     </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
