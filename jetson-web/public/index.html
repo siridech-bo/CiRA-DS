@@ -648,7 +648,9 @@
     function useInputSourceForPy() { const src = (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || '').trim(); const el = document.getElementById('pySrcUri'); if (el) el.value = src; }
     function toDsPyUri(src) { const s = (src||'').trim(); if (!s) return ''; if (/^rtsp:\/\//i.test(s)) return s; if (s.startsWith('/media/')) return 'file:///data/videos/' + s.slice(7); if (s.startsWith('/video/')) return 'file:///app/public/video/' + s.slice(7); if (s.startsWith('/')) return 'file://' + s; return s; }
     async function runDsPythonRtsp() { try { let src = document.getElementById('pySrcUri') && document.getElementById('pySrcUri').value ? document.getElementById('pySrcUri').value : (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || (localStorage.getItem('currentSourceUri')||'')); if (!src) { const sEl=document.getElementById('dsStatus'); if (sEl) sEl.textContent='No source'; const pEl=document.getElementById('pyRtspStatus'); if (pEl) pEl.textContent='No source'; return; } const uri = toDsPyUri(src); const cmd = [
-        'cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out',
+        'RTSP_STOP=$(curl -s -X POST http://localhost:3000/api/rtsp/stop || true)',
+        'DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)',
+        'cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out',
         'pkill -f deepstream_test1_rtsp_out.py || true',
         `nohup python3 deepstream_test1_rtsp_out.py "${uri}" > /app/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
       ].join(' && ');
