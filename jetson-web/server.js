@@ -136,7 +136,7 @@ function dockerRequest(method, reqPath, body, headers) {
   });
 }
 
-const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "siridech2/deepstream-l4t:6.0.1-triton-prebuilt";
+const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "siridech2/deepstream-l4t:pyds-dev";
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
 const MEDIA_DIR = process.env.MEDIA_DIR || "/data/videos";

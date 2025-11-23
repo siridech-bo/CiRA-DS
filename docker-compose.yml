@@ -18,8 +18,8 @@ services:
       - PORT=3000
       - JETSON_ONLY=false
       - IS_JETSON=true
-      - DEEPSTREAM_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
-      - DS_APP_IMAGE=nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
+      - DEEPSTREAM_IMAGE=siridech2/deepstream-l4t:pyds-dev
+      - DS_APP_IMAGE=siridech2/deepstream-l4t:pyds-dev
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
