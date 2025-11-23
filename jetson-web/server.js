@@ -734,6 +734,7 @@ app.get("/api/dsapp/samples", (_req, res) => {
         parts.push("if [ -f $DS_ROOT/lib/setup.py ]; then cd $DS_ROOT/lib && python3 setup.py install || echo SETUPPY_FAILED; fi");
       }
       parts.push("pip3 install --no-cache-dir pyds_ext || echo PYDS_EXT_FAILED");
+      parts.push("python3 -c \"import site, os; pkgs = site.getsitepackages();\npkg = (pkgs[0] if pkgs else site.getusersitepackages());\nf = os.path.join(pkg, 'pyds.py');\nopen(f, 'w').write('from pyds_ext import *\\n');\nprint('PYDS_SHIM', f)\"");
       parts.push("pip3 install --no-cache-dir cuda-python || echo CUDA_PY_FAILED");
       parts.push("python3 -c \"import cuda; import sys; print('CUDA_PY_OK', getattr(cuda,'__version__','?'))\"");
       parts.push("TRIES=15; OK=0; for i in $(seq 1 $TRIES); do python3 -c \"import sys; import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\" && OK=1 && break || true; echo \"PYDS_RETRY $i\"; sleep 1; done; if [ \"$OK\" = \"0\" ]; then python3 -c \"import sys; print('PYDS_ERR','No module named pyds')\"; fi; echo DONE $OK");
