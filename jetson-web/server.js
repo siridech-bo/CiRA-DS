@@ -553,6 +553,109 @@ app.post("/api/docker/login", async (req, res) => {
   }
 });
 
+app.get("/api/docker/images", async (_req, res) => {
+  try {
+    const r = await dockerRequest("GET", "/images/json");
+    let data = [];
+    try { data = JSON.parse(r.body || "[]"); } catch {}
+    res.status(r.statusCode || 200).json(Array.isArray(data) ? data : []);
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.get("/api/docker/image/inspect", async (req, res) => {
+  try {
+    const name = String((req.query && req.query.name) || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    const r = await dockerRequest("GET", `/images/${encodeURIComponent(name)}/json`);
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      try { return res.status(200).json(JSON.parse(r.body || "{}")); } catch { return res.status(200).type("text/plain").send(r.body || ""); }
+    }
+    return res.status(404).json({ error: "not_found", status: r.statusCode, detail: r.body || "" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.get("/api/docker/image/exists", async (req, res) => {
+  try {
+    const name = String((req.query && req.query.name) || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    const r = await dockerRequest("GET", `/images/${encodeURIComponent(name)}/json`);
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      let obj = null;
+      try { obj = JSON.parse(r.body || "{}"); } catch {}
+      const tags = (obj && obj.RepoTags) || [];
+      return res.json({ exists: true, name, tags });
+    }
+    return res.json({ exists: false, name, status: r.statusCode });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.get("/api/docker/container/inspect", async (req, res) => {
+  try {
+    const name = String((req.query && req.query.name) || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    const r = await dockerRequest("GET", `/containers/${encodeURIComponent(name)}/json`);
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      try { return res.status(200).json(JSON.parse(r.body || "{}")); } catch { return res.status(200).type("text/plain").send(r.body || ""); }
+    }
+    return res.status(404).json({ error: "not_found", status: r.statusCode, detail: r.body || "" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/docker/tag", async (req, res) => {
+  try {
+    const source = String((req.body && req.body.source) || "").trim();
+    const repo = String((req.body && req.body.repo) || "").trim();
+    const tag = String((req.body && req.body.tag) || "latest").trim();
+    if (!source || !repo) return res.status(400).json({ error: "source and repo required" });
+    const r = await dockerRequest("POST", `/images/${encodeURIComponent(source)}/tag?repo=${encodeURIComponent(repo)}&tag=${encodeURIComponent(tag)}`);
+    if (r.statusCode >= 200 && r.statusCode < 300) return res.json({ ok: true, source, target: `${repo}:${tag}` });
+    return res.status(500).json({ error: "tag_failed", status: r.statusCode, detail: r.body || "" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/docker/push", async (req, res) => {
+  try {
+    const image = String((req.body && req.body.image) || "").trim();
+    const tag = String((req.body && req.body.tag) || "latest").trim();
+    if (!image) return res.status(400).json({ error: "image required" });
+    let headers = undefined;
+    const auth = (req.body && req.body.auth) || null;
+    if (auth && typeof auth === "object") {
+      const payload = Buffer.from(JSON.stringify(auth)).toString("base64");
+      headers = { "X-Registry-Auth": payload };
+    }
+    const r = await dockerRequest("POST", `/images/${encodeURIComponent(image)}/push?tag=${encodeURIComponent(tag)}`, undefined, headers);
+    if (r.statusCode >= 200 && r.statusCode < 300) return res.type("text/plain").send(r.body || "");
+    return res.status(500).json({ error: "push_failed", status: r.statusCode, detail: r.body || "" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/docker/tag", async (req, res) => {
+  try {
+    const source = String((req.body && req.body.source) || "").trim();
+    const repo = String((req.body && req.body.repo) || "").trim();
+    const tag = String((req.body && req.body.tag) || "latest").trim();
+    if (!source || !repo) return res.status(400).json({ error: "source and repo required" });
+    const r = await dockerRequest("POST", `/images/${encodeURIComponent(source)}/tag?repo=${encodeURIComponent(repo)}&tag=${encodeURIComponent(tag)}`);
+    if (r.statusCode >= 200 && r.statusCode < 300) return res.json({ ok: true, source, repo, tag });
+    return res.status(500).json({ error: "tag_failed", detail: r.body || "", status: r.statusCode });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Web server running at http://localhost:${PORT}/`);
 });
