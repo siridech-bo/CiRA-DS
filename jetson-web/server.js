@@ -870,7 +870,7 @@ app.post("/api/dspython/run_example", async (req, res) => {
     const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
     const host = "127.0.0.1";
-    const rtsp = `rtsp://${host}:8554/ds-stream`;
+    const rtsp = `rtsp://${host}:8554/ds-test`;
     res.json({ status: "ok", rtsp });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
