@@ -785,6 +785,16 @@ app.post("/api/dspython/stop", async (_req, res) => {
   }
 });
 
+app.post("/api/dspython/remove", async (_req, res) => {
+  try {
+    try { await dockerRequest("POST", "/containers/ds_python/stop"); } catch {}
+    try { await dockerRequest("DELETE", "/containers/ds_python?force=true"); } catch {}
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.post("/api/dspython/exec", async (req, res) => {
   try {
     const cmd = String((req.body && req.body.cmd) || "").trim();

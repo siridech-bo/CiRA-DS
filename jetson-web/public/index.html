@@ -387,6 +387,17 @@
       <div class="status" id="pyExampleBackendStatus"></div>
     </div>
     <div class="card">
+      <h2>Container Init (3 steps)</h2>
+      <div class="row">
+        <button onclick="removeBackendSimple()">1) Remove Backend</button>
+        <button onclick="runBackendSimple()">2) Run Backend</button>
+        <button onclick="execShellSimple()">3) Exec Shell Test</button>
+      </div>
+      <div class="status" id="rmBackendStatus"></div>
+      <div class="status" id="runBackendStatus"></div>
+      <div class="status" id="execBackendStatus"></div>
+    </div>
+    <div class="card">
       <h2>Run Python Example</h2>
       <input id="pyExampleInput" placeholder="/opt/.../sample_720p.h264" value="/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264" />
       <div class="row">
@@ -975,6 +986,9 @@
     async function loadPgie() { try { const p = document.getElementById('pgiePath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('pgiePreview').value = j.content; document.getElementById('pgieStatus').textContent = 'Loaded'; } else { document.getElementById('pgieStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
     async function savePgie() { try { const p = document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt'; const content = document.getElementById('pgiePreview').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('pgieStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
     async function logsDsPythonExampleRun() { try { const cmd = "p=/app/configs/ds_py_rtsp_out.txt; q=/data/ds/configs/ds_py_rtsp_out.txt; if [ -f \"$p\" ]; then tail -n 200 \"$p\"; elif [ -f \"$q\" ]; then tail -n 200 \"$q\"; else echo NO_LOG; fi"; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('pyExampleRunStatus').textContent = out; } catch (e) { document.getElementById('pyExampleRunStatus').textContent = e.message; } }
+    async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
+    async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
+    async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
   </script>
 </body>
 </html>
