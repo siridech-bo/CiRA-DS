@@ -1,9 +1,11 @@
 import express from "express";
+import http from "http";
 import axios from "axios";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import os from "os";
+import { spawnSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -656,9 +658,51 @@ app.post("/api/docker/tag", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+server.listen(PORT, () => {
   console.log(`Web server running at http://localhost:${PORT}/`);
 });
+
+let WebSocketServer = null; let nodePty = null;
+try {
+  const wsMod = await import("ws");
+  WebSocketServer = wsMod.WebSocketServer || wsMod.Server || null;
+} catch {}
+try {
+  nodePty = await import("node-pty");
+} catch {}
+if (!(WebSocketServer && nodePty && nodePty.spawn)) {
+  try {
+    const npmExe = process.platform === "win32" ? "npm.cmd" : "npm";
+    const r = spawnSync(npmExe, ["install", "ws", "node-pty", "--no-save"], { cwd: __dirname, stdio: "inherit" });
+    if (r && r.status === 0) {
+      try {
+        const wsMod2 = await import("ws");
+        WebSocketServer = wsMod2.WebSocketServer || wsMod2.Server || null;
+      } catch {}
+      try {
+        nodePty = await import("node-pty");
+      } catch {}
+    }
+  } catch {}
+}
+if (WebSocketServer && nodePty && nodePty.spawn) {
+  const wss = new WebSocketServer({ server, path: "/ws/terminal" });
+  wss.on("connection", (ws) => {
+    const shell = process.platform === "win32" ? "powershell.exe" : "bash";
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -l"];
+    const p = nodePty.spawn(shell, args, { name: "xterm-color", cols: 80, rows: 24, cwd: process.cwd(), env: process.env });
+    p.onData((d) => { try { ws.send(d); } catch {} });
+    p.onExit(() => { try { ws.close(); } catch {} });
+    ws.on("message", (msg) => {
+      let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
+      if (obj && obj.type === "input" && typeof obj.data === "string") { p.write(obj.data); return; }
+      if (obj && obj.type === "resize" && obj.cols && obj.rows) { try { p.resize(Number(obj.cols), Number(obj.rows)); } catch {} return; }
+      p.write(String(msg));
+    });
+    ws.on("close", () => { try { p.kill(); } catch {} });
+  });
+}
 
 const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
 function buildSampleCmd(sample, uris) {
@@ -874,7 +918,7 @@ app.post("/api/dspython/run_example", async (req, res) => {
       "pkill -f deepstream_test1_rtsp_out.py || true",
       "mkdir -p /data/ds/configs",
       ": > /data/ds/configs/ds_py_rtsp_out.txt",
-      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} >> /data/ds/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
+      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
     ].join(" && ");
     const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
