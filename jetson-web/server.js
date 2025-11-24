@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import os from "os";
-import { spawnSync } from "child_process";
+import { spawnSync, spawn } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -700,6 +700,25 @@ if (WebSocketServer && nodePty && nodePty.spawn) {
       p.write(String(msg));
     });
     ws.on("close", () => { try { p.kill(); } catch {} });
+  });
+}
+else if (WebSocketServer) {
+  const wss = new WebSocketServer({ server, path: "/ws/terminal" });
+  wss.on("connection", (ws) => {
+    const shell = process.platform === "win32" ? "powershell.exe" : "bash";
+    const cmd = process.platform === "win32" ? shell : shell;
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -i ds_python bash -l || bash -l"];
+    const ch = spawn(cmd, args, { cwd: process.cwd(), env: process.env });
+    try { ws.send("\r\n[WebTerminal] Connected (non-pty mode).\r\n"); } catch {}
+    ch.stdout.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
+    ch.stderr.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
+    ch.on("close", () => { try { ws.close(); } catch {} });
+    ws.on("message", (msg) => {
+      let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
+      const data = (obj && obj.type === "input") ? String(obj.data || "") : String(msg || "");
+      try { ch.stdin.write(data); } catch {}
+    });
+    ws.on("close", () => { try { ch.kill("SIGTERM"); } catch {} });
   });
 }
 
