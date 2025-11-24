@@ -829,7 +829,8 @@ app.post("/api/dspython/start_example", async (req, res) => {
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
       "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
-      "PYTHONPATH=/workspace"
+      "PYTHONPATH=/workspace",
+      "PYTHONUNBUFFERED=1"
     ];
     const cmd = [
       "ln -s /workspace/pyds_ext /workspace/pyds || true",
@@ -860,7 +861,9 @@ app.post("/api/dspython/run_example", async (req, res) => {
       "DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)",
       "cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out",
       "pkill -f deepstream_test1_rtsp_out.py || true",
-      `nohup python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} > /data/ds/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
+      "mkdir -p /data/ds/configs",
+      ": > /data/ds/configs/ds_py_rtsp_out.txt",
+      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} >> /data/ds/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
     ].join(" && ");
     const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
