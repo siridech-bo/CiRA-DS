@@ -100,7 +100,6 @@ app.delete("/api/message", (_req, res) => {
   res.json({ ok: true });
 });
 
-import http from "http";
 import https from "https";
 
 const DOCKER_HOST_HTTP = process.env.DOCKER_HOST_HTTP || "";
