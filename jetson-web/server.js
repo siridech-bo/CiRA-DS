@@ -833,7 +833,8 @@ app.post("/api/dspython/start_example", async (req, res) => {
       "PYTHONUNBUFFERED=1"
     ];
     const cmd = [
-      "ln -s /workspace/pyds_ext /workspace/pyds || true",
+      "(test -L /workspace/pyds || rm -rf /workspace/pyds) && ln -s /workspace/pyds_ext /workspace/pyds || true",
+      "python3 -c \"import site,os; pkgs=site.getsitepackages() or [site.getusersitepackages()]; f=os.path.join(pkgs[0],'pyds.py'); open(f,'w').write('from pyds_ext import *\\n'); print('PYDS_SHIM', f)\"",
       "echo READY",
       "sleep infinity"
     ].join(" && ");
