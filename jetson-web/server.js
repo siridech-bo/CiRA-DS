@@ -860,7 +860,7 @@ app.post("/api/dspython/run_example", async (req, res) => {
       "DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)",
       "cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out",
       "pkill -f deepstream_test1_rtsp_out.py || true",
-      `nohup python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} > /app/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
+      `nohup python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} > /data/ds/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
     ].join(" && ");
     const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
