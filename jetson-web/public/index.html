@@ -145,6 +145,13 @@
     async function clearHlsExample() { try { const r = await fetch('/api/hls/clear', { method: 'POST' }); const j = await r.json(); document.getElementById('pyExampleHlsStatus').textContent = JSON.stringify(j); try { const v = document.getElementById('pyExampleVideo'); v.removeAttribute('src'); } catch {} } catch (e) { document.getElementById('pyExampleHlsStatus').textContent = e.message; } }
     function togglePyExampleMonitor(on) { try { if (window.pyExMon) { clearInterval(window.pyExMon); window.pyExMon = null; } if (on) { updatePyExampleReady(); window.pyExMon = setInterval(updatePyExampleReady, 1000); } } catch {} }
     async function updatePyExampleReady() { try { const cmd = "p=/app/configs/ds_py_rtsp_out.txt; q=/data/ds/configs/ds_py_rtsp_out.txt; if [ -f \"$p\" ]; then tail -n 200 \"$p\"; elif [ -f \"$q\" ]; then tail -n 200 \"$q\"; else echo NO_LOG; fi"; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 400 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } const lines = String(out||'').split(/\r?\n/).filter(Boolean); const readyRe = /(Load new model:.*success|NVENC|Setting[^\n]*PLAYING|RTSP[^\n]*8554)/i; const matchLine = lines.find(l => readyRe.test(l)); const prepFocus = /(nvinfer|NVENC|NvMMLite|NVMEDIA|PLAYING|Gst|primary-inference|nvv4l2h264enc|nvv4l2decoder|rtsp|sink)/i; const filtered = lines.filter(l => prepFocus.test(l)).slice(-8); const el = document.getElementById('pyExampleBackendStatus'); if (!el) return; if (matchLine) { el.textContent = 'Video Ready\n' + matchLine; } else { el.textContent = filtered.length ? filtered.join('\n') : 'Preparing...'; } } catch {} }
+    async function runPyCommand(cmd, statusId, waitMs) { try { const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: Number(waitMs||500) }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } const el = document.getElementById(statusId); if (el) el.textContent = out; } catch (e) { const el = document.getElementById(statusId); if (el) el.textContent = e.message; } }
+    async function runAliasStep() { const cmd = 'ln -s /workspace/pyds_ext /workspace/pyds || true; echo PYDS_ALIAS_OK'; await runPyCommand(cmd, 'cmdAliasStatus', 500); }
+    async function testGiPydsStep() { const cmd = "python3 -c 'import gi; gi.require_version(\"Gst\",\"1.0\"); from gi.repository import Gst; import pyds; print(\"GI+PYDS OK\")'"; await runPyCommand(cmd, 'cmdTestStatus', 1000); }
+    async function killExampleStep() { const cmd = 'pkill -f deepstream_test1_rtsp_out.py || true; echo KILLED'; await runPyCommand(cmd, 'cmdKillStatus', 500); }
+    async function startExampleStep() { const host = location.hostname || '127.0.0.1'; const rtsp = 'rtsp://' + host + ':8554/ds-test'; try { localStorage.setItem('pyExampleRtsp', rtsp); } catch {} const input = document.getElementById('pyExampleInput').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264'; const cmd = [ 'DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)', 'cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out', 'nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out.py -i ' + input + ' -c H264 >> /data/ds/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!' ].join(' && '); await runPyCommand(cmd, 'cmdStartStatus', 1000); }
+    async function tailExampleStep() { const cmd = "p=/app/configs/ds_py_rtsp_out.txt; q=/data/ds/configs/ds_py_rtsp_out.txt; if [ -f \"$p\" ]; then tail -n 80 \"$p\"; elif [ -f \"$q\" ]; then tail -n 80 \"$q\"; else echo NO_LOG; fi"; await runPyCommand(cmd, 'cmdTailStatus', 600); }
+    async function startHlsFromRtspStep() { let rtsp = ''; try { rtsp = localStorage.getItem('pyExampleRtsp') || ''; } catch {} if (!rtsp) { const host = location.hostname || '127.0.0.1'; rtsp = 'rtsp://' + host + ':8554/ds-test'; } try { const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri: rtsp, hls_time: 2, hls_list_size: 5 }) }); const j = await r.json(); document.getElementById('cmdHlsStatus').textContent = JSON.stringify(j); if (j.playlist) { document.getElementById('pyExamplePlaylist').value = j.playlist; for (let i=0;i<20;i++){ try { const resp = await fetch(j.playlist, { cache: 'no-store' }); if (resp.ok){ playHlsExample(); break; } } catch{} await new Promise(res => setTimeout(res, 500)); } } } catch (e) { document.getElementById('cmdHlsStatus').textContent = e.message; } }
   </script>
   </head>
 <body>
@@ -402,6 +409,33 @@
       </div>
       <video id="pyExampleVideo" playsinline controls muted></video>
       <div class="status" id="pyExampleHlsStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Step Runner</h2>
+      <div class="row">
+        <button onclick="runAliasStep()">Link pyds alias</button>
+      </div>
+      <div class="status" id="cmdAliasStatus"></div>
+      <div class="row">
+        <button onclick="testGiPydsStep()">Test GI+pyds</button>
+      </div>
+      <div class="status" id="cmdTestStatus"></div>
+      <div class="row">
+        <button onclick="killExampleStep()">Kill Example</button>
+      </div>
+      <div class="status" id="cmdKillStatus"></div>
+      <div class="row">
+        <button onclick="startExampleStep()">Start Example (nohup)</button>
+      </div>
+      <div class="status" id="cmdStartStatus"></div>
+      <div class="row">
+        <button onclick="tailExampleStep()">Tail Example Log</button>
+      </div>
+      <div class="status" id="cmdTailStatus"></div>
+      <div class="row">
+        <button onclick="startHlsFromRtspStep()">Start HLS from RTSP</button>
+      </div>
+      <div class="status" id="cmdHlsStatus"></div>
     </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
