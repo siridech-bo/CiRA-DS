@@ -811,6 +811,72 @@ app.post("/api/dspython/exec", async (req, res) => {
   }
 });
 
+app.post("/api/dspython/start_example", async (req, res) => {
+  try {
+    const image = (req.body && req.body.image) || DS_APP_IMAGE;
+    const binds = [
+      `${MEDIA_DIR}:${MEDIA_DIR}`,
+      `${CONFIGS_DIR}:${CONFIGS_DIR}`,
+      "/data/ds/configs:/data/ds/configs",
+      "/data/weight_config:/data/weight_config",
+      "/app/configs:/host_app_configs",
+      "/data/hls:/app/public/video",
+      "/data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps",
+      "/data/ds/apps/pyds_ext:/workspace/pyds_ext"
+    ];
+    const env = [
+      `DISPLAY=${process.env.DISPLAY || ":0"}`,
+      "CUDA_VER=10.2",
+      "PLATFORM_TEGRA=1",
+      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+      "PYTHONPATH=/workspace"
+    ];
+    const cmd = [
+      "ln -s /workspace/pyds_ext /workspace/pyds || true",
+      "echo READY",
+      "sleep infinity"
+    ].join(" && ");
+    await dockerRequest("DELETE", "/containers/ds_python?force=true");
+    const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const created = await dockerRequest("POST", "/containers/create?name=ds_python", body);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
+    const start = await dockerRequest("POST", "/containers/ds_python/start");
+    if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
+    res.json({ status: "started" });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/dspython/run_example", async (req, res) => {
+  try {
+    const input = String((req.body && req.body.input) || "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264");
+    const codec = String((req.body && req.body.codec) || "H264");
+    const info = await dockerRequest("GET", "/containers/ds_python/json");
+    let running = false;
+    try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+    if (!running) return res.status(400).json({ error: "ds_python not running" });
+    const cmd = [
+      "DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)",
+      "cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out",
+      "pkill -f deepstream_test1_rtsp_out.py || true",
+      `nohup python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} > /app/configs/ds_py_rtsp_out.txt 2>&1 & echo STARTED=$!`
+    ].join(" && ");
+    const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
+    const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
+    let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+    if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
+    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+    if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
+    const host = "127.0.0.1";
+    const rtsp = `rtsp://${host}:8554/ds-test`;
+    res.json({ status: "ok", rtsp });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.post("/api/dspython/commit", async (req, res) => {
   try {
     const repo = String((req.body && req.body.repo) || "").trim();

@@ -133,6 +133,15 @@
     window.addEventListener('hashchange', initTabs);
     function toggleDsPythonMonitor(on) { try { if (window.dsPyMon) { clearInterval(window.dsPyMon); window.dsPyMon = null; } if (on) { updateDsPythonStatus(); window.dsPyMon = setInterval(updateDsPythonStatus, 2000); } } catch {} }
     async function updateDsPythonStatus() { try { const r = await fetch('/api/dspython/logs?tail=2000'); const t = await r.text(); const stateEl = document.getElementById('pyBackendState'); if (!stateEl) return; if (!r.ok) { stateEl.textContent = 'Backend: stopped'; return; } const lines = t.split(/\r?\n/); const giOk = /GI_OK|python3-gi|gobject-introspection|gir1\.2-gstreamer-1\.0|gir1\.2-glib-2\.0/i.test(t); const pydsOk = /PYDS_OK|import\s+pyds\s+.*succeeded|pyds\s+built|Building\s+wheel\s+for\s+pyds|deepstream_python_apps/i.test(t); const cudaOk = /CUDA_PY_OK|nvinfer|libcuda|cuInit|cuda/i.test(t); const readyOk = /DONE\s*1|RTSP.*8554|ready/i.test(t); const installing = /apt-get|\bGet:\b|Setting up|Unpacking|Reading package lists/i.test(t); const building = /cmake|make\b|ninja\b|pip\s+install\s+pyds|build/i.test(t); const hasError = /(error|failed|No module named pyds|ImportError)/i.test(t); let phase = 'setup'; if (hasError) phase = 'error'; else if (readyOk) phase = 'ready'; else if (building) phase = 'building'; else if (installing) phase = 'installing'; const parts = []; parts.push('Backend: running'); parts.push(giOk ? 'GI' : 'no GI'); parts.push(pydsOk ? 'pyds' : 'no pyds'); parts.push(cudaOk ? 'cuda' : 'no cuda'); parts.push('phase:' + phase); stateEl.textContent = parts.join(' • '); const focus = /(GI_|PYDS_|CUDA_|DONE|python3-gi|gobject-introspection|pyds|cmake|make|ninja|DeepStream|nvinfer|cuda|error|failed|Setting up|Unpacking|\bGet:\b|Reading package lists)/i; const filtered = lines.filter(l => focus.test(l)).slice(-80); const logEl = document.getElementById('pyRtspStatus'); if (logEl) logEl.textContent = (filtered.length ? filtered : lines.slice(-80)).join('\n'); } catch (e) { const el = document.getElementById('pyBackendState'); if (el) el.textContent = String(e); } }
+    async function startDsPythonExample() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('pyExampleBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pyExampleBackendStatus').textContent = e.message; } }
+    async function stopDsPythonExample() { try { const r = await fetch('/api/dspython/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('pyExampleBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pyExampleBackendStatus').textContent = e.message; } }
+    async function logsDsPythonExample() { try { const r = await fetch('/api/dspython/logs?tail=1200'); const t = await r.text(); document.getElementById('pyExampleBackendStatus').textContent = t; } catch (e) { document.getElementById('pyExampleBackendStatus').textContent = e.message; } }
+    async function runDsPythonExample() { try { const input = document.getElementById('pyExampleInput').value || '/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264'; const r = await fetch('/api/dspython/run_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, codec: 'H264' }) }); const j = await r.json(); document.getElementById('pyExampleRunStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pyExampleRunStatus').textContent = e.message; } }
+    function playHlsExample() { const url = document.getElementById('pyExamplePlaylist').value || '/video/out.m3u8'; const video = document.getElementById('pyExampleVideo'); const isM3U8 = url.toLowerCase().endsWith('.m3u8'); if (isM3U8 && window.Hls && Hls.isSupported()) { const h = new Hls(); h.loadSource(url); h.attachMedia(video); } else { video.src = url; } video.play(); }
+    async function startHlsExample() { try { const host = location.hostname || '127.0.0.1'; const rtsp = 'rtsp://' + host + ':8554/ds-test'; const r = await fetch('/api/hls/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uri: rtsp, hls_time: 2, hls_list_size: 5 }) }); const j = await r.json(); document.getElementById('pyExampleHlsStatus').textContent = JSON.stringify(j); if (j.playlist) { document.getElementById('pyExamplePlaylist').value = j.playlist; for (let i=0;i<20;i++){ try { const resp = await fetch(j.playlist, { cache: 'no-store' }); if (resp.ok){ playHlsExample(); break; } } catch{} await new Promise(res => setTimeout(res, 500)); } } } catch (e) { document.getElementById('pyExampleHlsStatus').textContent = e.message; } }
+    async function stopHlsExample() { try { const r = await fetch('/api/hls/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('pyExampleHlsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pyExampleHlsStatus').textContent = e.message; } }
+    async function logsHlsExample() { try { const r = await fetch('/api/hls/logs'); const t = await r.text(); document.getElementById('pyExampleHlsStatus').textContent = t; } catch (e) { document.getElementById('pyExampleHlsStatus').textContent = e.message; } }
+    async function clearHlsExample() { try { const r = await fetch('/api/hls/clear', { method: 'POST' }); const j = await r.json(); document.getElementById('pyExampleHlsStatus').textContent = JSON.stringify(j); try { const v = document.getElementById('pyExampleVideo'); v.removeAttribute('src'); } catch {} } catch (e) { document.getElementById('pyExampleHlsStatus').textContent = e.message; } }
   </script>
   </head>
 <body>
@@ -140,6 +149,7 @@
     <button onclick="setTab('input')">Input</button>
     <button onclick="setTab('pipeline')">Process Pipeline</button>
     <button onclick="setTab('pipeline-python')">Process Pipeline Python</button>
+    <button onclick="setTab('testing-python')">Testing Python Example</button>
     <button onclick="setTab('output')">Output</button>
     <button onclick="setTab('utility')">Utility</button>
   </div>
@@ -354,6 +364,40 @@
       </div>
       <div class="status" id="pyBackendState"></div>
       <div class="status" id="pyRtspStatus" style="white-space:pre-wrap"></div>
+    </div>
+  </div>
+  <div class="grid" id="tab-testing-python" style="display:none">
+    <div class="card">
+      <h2>Backend</h2>
+      <div class="row">
+        <button onclick="startDsPythonExample()">Start Backend (Example)</button>
+        <button onclick="stopDsPythonExample()">Stop Backend</button>
+        <button onclick="logsDsPythonExample()">Backend Logs</button>
+      </div>
+      <div class="status" id="pyExampleBackendStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Run Python Example</h2>
+      <input id="pyExampleInput" placeholder="/opt/.../sample_720p.h264" value="/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264" />
+      <div class="row">
+        <button onclick="runDsPythonExample()">Run Example</button>
+      </div>
+      <div class="status" id="pyExampleRunStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Preview</h2>
+      <div class="row">
+        <button onclick="startHlsExample()">Start Preview</button>
+        <button onclick="stopHlsExample()">Stop Preview</button>
+        <button onclick="logsHlsExample()">Preview Logs</button>
+        <button onclick="clearHlsExample()">Clear Segments</button>
+      </div>
+      <input id="pyExamplePlaylist" placeholder="/video/out.m3u8" value="/video/out.m3u8" />
+      <div class="row">
+        <button onclick="playHlsExample()">Play</button>
+      </div>
+      <video id="pyExampleVideo" playsinline controls muted></video>
+      <div class="status" id="pyExampleHlsStatus"></div>
     </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
