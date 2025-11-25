@@ -463,9 +463,11 @@
         <div class="card">
           <h2>Container File Editor</h2>
           <input id="pyFilePath" style="width:100%" value="/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py" />
+          <input id="pyFilePathSaveAs" style="width:100%" placeholder="Save As path (e.g., /opt/.../deepstream_test1_rtsp_out.py.bak)" />
           <div class="row">
             <button onclick="loadContainerFile()">Load</button>
             <button onclick="saveContainerFile()">Save</button>
+            <button onclick="saveContainerFileAs()">Save As</button>
           </div>
           <textarea id="pyFileText" rows="18" style="width:100%"></textarea>
           <div class="status" id="pyFileStatus"></div>
@@ -1133,6 +1135,20 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
               const t = await r.text();
               const out = _b64dec(t.trim());
               document.getElementById('pyFileStatus').textContent = out || 'Saved';
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
+          }
+          async function saveContainerFileAs() {
+            try {
+              const p = String(document.getElementById('pyFilePathSaveAs').value || '').trim();
+              const txt = String(document.getElementById('pyFileText').value || '');
+              if (!p) { document.getElementById('pyFileStatus').textContent = 'Save As path required'; return; }
+              const b64 = _b64enc(txt);
+              const ps = p.replace(/'/g, "'\"'\"'");
+              const cmd = `python3 - <<'PY'\nimport base64,sys,os\nos.makedirs(os.path.dirname('${ps}') or '.', exist_ok=True)\nopen('${ps}','wb').write(base64.b64decode('${b64}'))\nprint('OK')\nPY`;
+              const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) });
+              const t = await r.text();
+              const out = _b64dec(t.trim());
+              document.getElementById('pyFileStatus').textContent = out || 'Saved As';
             } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
           }
           async function playWebRtcNative() {
