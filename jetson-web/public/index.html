@@ -466,19 +466,19 @@
             <button onclick="copyQuickCmds()">Copy All</button>
           </div>
           <pre id="quickCmds" style="white-space:pre-wrap;border:1px solid #ccc;padding:8px;background:#f9f9f9">
- - sudo docker rm -f ds_python || true
- 
- - sudo docker run -d --name ds_python --network host --runtime nvidia -v /data/videos:/data/videos -v /data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps -v /data/ds/apps/pyds_ext:/workspace/pyds_ext siridech2/deepstream-l4t:pyds-dev
- 
- - sudo docker exec -it ds_python bash
- 
- - ln -s /workspace/pyds_ext /workspace/pyds
- 
- - export PYTHONPATH=/workspace:$PYTHONPATH
- 
- - cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out
- 
- -  python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264 -c H264
+sudo docker rm -f ds_python || true  # remove existing DeepStream container if present
+
+sudo docker run -d --name ds_python --network host --runtime nvidia -v /data/videos:/data/videos -v /data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps -v /data/ds/apps/pyds_ext:/workspace/pyds_ext siridech2/deepstream-l4t:pyds-dev  # start DeepStream container
+
+sudo docker exec -it ds_python bash  # enter container shell (on Web Terminal you may omit sudo)
+
+ln -s /workspace/pyds_ext /workspace/pyds  # link pyds alias to local extension
+
+export PYTHONPATH=/workspace:$PYTHONPATH  # add workspace to Python path
+
+cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out  # go to RTSP-out sample app
+
+python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264 -c H264  # run sample; RTSP at rtsp://127.0.0.1:8554/ds-test
           </pre>
         </div>
   </div>
