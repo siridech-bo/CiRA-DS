@@ -708,27 +708,31 @@ if (!(WebSocketServer && nodePty && nodePty.spawn)) {
     }
   } catch {}
 }
+let TERM_MODE = "disabled";
 if (WebSocketServer && nodePty && nodePty.spawn) {
   const wss = new WebSocketServer({ server, path: "/ws/terminal" });
   console.log("Web terminal: PTY enabled at /ws/terminal");
+  TERM_MODE = "pty";
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -l"];
     const p = nodePty.spawn(shell, args, { name: "xterm-color", cols: 80, rows: 24, cwd: process.cwd(), env: process.env });
     p.onData((d) => { try { ws.send(d); } catch {} });
     p.onExit(() => { try { ws.close(); } catch {} });
+    const iv = setInterval(() => { try { ws.ping(); } catch {} }, 30000);
     ws.on("message", (msg) => {
       let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
       if (obj && obj.type === "input" && typeof obj.data === "string") { p.write(obj.data); return; }
       if (obj && obj.type === "resize" && obj.cols && obj.rows) { try { p.resize(Number(obj.cols), Number(obj.rows)); } catch {} return; }
       p.write(String(msg));
     });
-    ws.on("close", () => { try { p.kill(); } catch {} });
+    ws.on("close", () => { try { p.kill(); } catch {} try { clearInterval(iv); } catch {} });
   });
 }
 else if (WebSocketServer) {
   const wss = new WebSocketServer({ server, path: "/ws/terminal" });
   console.log("Web terminal: stdio fallback at /ws/terminal");
+  TERM_MODE = "stdio";
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const cmd = process.platform === "win32" ? shell : shell;
@@ -738,17 +742,22 @@ else if (WebSocketServer) {
     ch.stdout.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
     ch.stderr.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
     ch.on("close", () => { try { ws.close(); } catch {} });
+    const iv = setInterval(() => { try { ws.ping(); } catch {} }, 30000);
     ws.on("message", (msg) => {
       let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
       const data = (obj && obj.type === "input") ? String(obj.data || "") : String(msg || "");
       try { ch.stdin.write(data); } catch {}
     });
-    ws.on("close", () => { try { ch.kill("SIGTERM"); } catch {} });
+    ws.on("close", () => { try { ch.kill("SIGTERM"); } catch {} try { clearInterval(iv); } catch {} });
   });
 }
 else {
   console.log("Web terminal: disabled (ws missing)");
 }
+
+app.get("/api/terminal/health", (_req, res) => {
+  res.json({ ws: !!WebSocketServer, mode: TERM_MODE, path: "/ws/terminal" });
+});
 
 const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
 function buildSampleCmd(sample, uris) {
