@@ -479,6 +479,10 @@ export PYTHONPATH=/workspace:$PYTHONPATH  # add workspace to Python path
 cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out  # go to RTSP-out sample app
 
 python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264 -c H264  # run sample; RTSP at rtsp://127.0.0.1:8554/ds-test
+
+Publish From Container
+FFmpeg:
+ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolatency -f rtsp -rtsp_transport tcp rtsp://192.168.1.200:8554/ds-test
           </pre>
         </div>
         <div class="card">
