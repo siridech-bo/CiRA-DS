@@ -732,7 +732,7 @@ else if (WebSocketServer) {
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const cmd = process.platform === "win32" ? shell : shell;
-    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -i ds_python bash -l || bash -l"];
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -i ds_python bash -il || bash -il"];
     const ch = spawn(cmd, args, { cwd: process.cwd(), env: process.env });
     try { ws.send("\r\n[WebTerminal] Connected (non-pty mode).\r\n"); } catch {}
     ch.stdout.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
