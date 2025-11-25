@@ -449,25 +449,17 @@
       <div class="status" id="cmdHlsStatus"></div>
     </div>
         <div class="card">
-          <h2>Host Terminal</h2>
+          <h2>Web Terminal</h2>
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
-          <div id="termHostHost" style="width:100%;height:360px;border:1px solid #ccc;font-family:Consolas,Menlo,Monaco,monospace"></div>
+          <div id="termHost" style="width:100%;height:360px;border:1px solid #ccc;font-family:Consolas,Menlo,Monaco,monospace"></div>
           <div class="row">
-            <button onclick="openHostTerminal()">Open Host Terminal</button>
-            <button onclick="closeHostTerminal()">Close Host Terminal</button>
+            <button onclick="openWebTerminal()">Open Terminal</button>
+            <button onclick="closeWebTerminal()">Close Terminal</button>
+            <button id="openContainerHidden" onclick="openContainerTerminalHidden()" style="display:none">Open Container Terminal (hidden)</button>
           </div>
-          <div class="status" id="termStatusHost"></div>
+          <div class="status" id="termStatus"></div>
           <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
           <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/dist/xterm-addon-fit.js"></script>
-        </div>
-        <div class="card">
-          <h2>Container Terminal</h2>
-          <div id="termHostCont" style="width:100%;height:360px;border:1px solid #ccc;font-family:Consolas,Menlo,Monaco,monospace"></div>
-          <div class="row">
-            <button onclick="openContainerTerminal()">Open Container Terminal</button>
-            <button onclick="closeContainerTerminal()">Close Container Terminal</button>
-          </div>
-          <div class="status" id="termStatusCont"></div>
         </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
@@ -1023,19 +1015,17 @@
           }
           async function openWebTerminal(endpoint, elId, statusId, key) {
             try {
-              if (window[key]) { return; }
+              if (window[key || '_term']) { return; }
               let mode = 'unknown';
               try { const r = await fetch('/api/terminal/health'); const j = await r.json(); mode = String(j && j.mode || 'unknown'); } catch {}
               const path = endpoint || '/ws/terminal';
-              const obj = makeTerm(elId, statusId, path);
-              window[key] = { ...obj, mode };
+              const obj = makeTerm(elId || 'termHost', statusId || 'termStatus', path);
+              window[key || '_term'] = { ...obj, mode };
               window.addEventListener('resize', () => { try { const cols = obj.t.cols, rows = obj.t.rows; if (mode === 'pty' && obj.ws.readyState === 1) { obj.ws.send(JSON.stringify({ type: 'resize', cols, rows })); } } catch{} });
-            } catch (e) { document.getElementById('termStatus').textContent = e.message; }
+            } catch (e) { document.getElementById(statusId || 'termStatus').textContent = e.message; }
           }
-          function openHostTerminal() { openWebTerminal('/ws/terminal', 'termHostHost', 'termStatusHost', '_term_host'); }
-          function openContainerTerminal() { openWebTerminal('/ws/terminal/container', 'termHostCont', 'termStatusCont', '_term_cont'); }
-          function closeHostTerminal() { try { const o = window._term_host; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term_host = null; } catch (e) { document.getElementById('termStatusHost').textContent = e.message; } }
-          function closeContainerTerminal() { try { const o = window._term_cont; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term_cont = null; } catch (e) { document.getElementById('termStatusCont').textContent = e.message; } }
+          function closeWebTerminal() { try { const o = window._term; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term = null; } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
+          function openContainerTerminalHidden() { openWebTerminal('/ws/terminal/container', 'termHost', 'termStatus', '_term'); }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
     async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
