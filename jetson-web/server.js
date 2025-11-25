@@ -1305,3 +1305,28 @@ app.get("/api/configs/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// MediaMTX config helpers
+app.get("/api/mediamtx/read", async (_req, res) => {
+  try {
+    const p = "/data/mediamtx.yml";
+    const t = await fs.promises.readFile(p, "utf8");
+    res.type("text/plain").send(t);
+  } catch (e) {
+    res.status(404).json({ error: e.message });
+  }
+});
+
+app.post("/api/mediamtx/save", async (req, res) => {
+  try {
+    const c = String((req.body && req.body.content) || "");
+    if (!c) return res.status(400).json({ error: "content required" });
+    const p = "/data/mediamtx.yml";
+    await fs.promises.mkdir(path.dirname(p), { recursive: true });
+    await fs.promises.writeFile(p, c, "utf8");
+    try { await fs.promises.chmod(p, 0o644); } catch {}
+    res.json({ ok: true, path: p, bytes: Buffer.byteLength(c) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
