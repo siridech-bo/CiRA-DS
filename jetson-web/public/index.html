@@ -490,6 +490,16 @@ python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/sa
           <iframe id="webrtcFrame" style="width:100%;height:360px;border:1px solid #ccc"></iframe>
           <div class="status" id="webrtcStatus"></div>
         </div>
+        <div class="card">
+          <h2>RTSP WebRTC Player (Native)</h2>
+          <input id="webrtcPath" placeholder="ds-test" value="ds-test" />
+          <div class="row">
+            <button onclick="playWebRtcNative()">Play</button>
+            <button onclick="stopWebRtcNative()">Stop</button>
+          </div>
+          <video id="webrtcVideo" playsinline autoplay muted style="width:100%;height:360px;background:#000"></video>
+          <div class="status" id="webrtcNativeStatus"></div>
+        </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
     <div class="card">
@@ -1061,6 +1071,29 @@ python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/sa
           function _webrtcUrl() { const proto = (location.protocol === 'https:' ? 'https://' : 'http://'); return proto + location.hostname + ':8889/'; }
           function openWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); document.getElementById('webrtcStatus').textContent = 'Opened'; } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
           function reloadWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
+          async function playWebRtcNative() {
+            try {
+              const path = String(document.getElementById('webrtcPath').value || 'ds-test').trim();
+              const proto = (location.protocol === 'https:' ? 'https://' : 'http://');
+              const url = proto + location.hostname + ':8889/whep/' + encodeURIComponent(path);
+              const vid = document.getElementById('webrtcVideo');
+              const pc = new RTCPeerConnection({ iceServers: [] });
+              pc.addTransceiver('video', { direction: 'recvonly' });
+              pc.ontrack = (ev) => { try { vid.srcObject = ev.streams[0]; } catch {} };
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
+              const sdp = await r.text();
+              await pc.setRemoteDescription({ type: 'answer', sdp });
+              window._webrtc = { pc, vid };
+              document.getElementById('webrtcNativeStatus').textContent = 'Playing ' + path;
+            } catch (e) {
+              document.getElementById('webrtcNativeStatus').textContent = e.message;
+            }
+          }
+          function stopWebRtcNative() {
+            try { const o = window._webrtc; if (!o) return; try { o.pc.close(); } catch {} try { o.vid.srcObject = null; } catch {} window._webrtc = null; document.getElementById('webrtcNativeStatus').textContent = 'Stopped'; } catch (e) { document.getElementById('webrtcNativeStatus').textContent = e.message; }
+          }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
     async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
