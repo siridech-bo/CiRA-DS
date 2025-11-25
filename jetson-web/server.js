@@ -361,7 +361,7 @@ app.post("/api/hls/clear", async (_req, res) => {
 app.post("/api/rtsp/start", async (_req, res) => {
   const image = process.env.RTSP_IMAGE || "bluenviron/mediamtx:latest";
   await dockerRequest("DELETE", "/containers/rtsp_server?force=true");
-  const body = { Image: image, HostConfig: { NetworkMode: "host" } };
+  const body = { Image: image, HostConfig: { NetworkMode: "host", Binds: ["/data/mediamtx.yml:/mediamtx.yml", "/data:/data"] } };
   let created = await dockerRequest("POST", "/containers/create?name=rtsp_server", body);
   if (!(created.statusCode >= 200 && created.statusCode < 300)) {
     await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(image)}`);

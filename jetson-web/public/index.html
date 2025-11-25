@@ -490,9 +490,11 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
           <div class="row">
             <button onclick="openWebRtcPlayer()">Open Player</button>
             <button onclick="reloadWebRtcPlayer()">Reload</button>
+            <button onclick="applyMediaMtxConfigDsTest()">Apply ds-test config</button>
           </div>
           <iframe id="webrtcFrame" style="width:100%;height:360px;border:1px solid #ccc"></iframe>
           <div class="status" id="webrtcStatus"></div>
+          <div class="status" id="mediamtxStatus"></div>
         </div>
         <div class="card">
           <h2>RTSP WebRTC Player (Native)</h2>
@@ -1075,6 +1077,26 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
           function _webrtcUrl() { const proto = (location.protocol === 'https:' ? 'https://' : 'http://'); return proto + location.hostname + ':8889/'; }
           function openWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); document.getElementById('webrtcStatus').textContent = 'Opened'; } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
           function reloadWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
+          async function applyMediaMtxConfigDsTest() {
+            try {
+              const host = location.hostname || '127.0.0.1';
+              const cfg = [
+                'webrtc: yes',
+                'webrtcAddress: :8889',
+                'rtspAddress: :8554',
+                '',
+                'paths:',
+                '  ds-test:',
+                '    source: rtsp://' + host + ':8554/ds-test'
+              ].join('\n');
+              const r = await fetch('/api/mediamtx/save_host', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: cfg }) });
+              const j = await r.json();
+              document.getElementById('mediamtxStatus').textContent = r.ok ? ('Saved ' + (j.bytes||0) + ' bytes to ' + (j.path||'')) : (j && j.error ? j.error : 'Save failed');
+              try { const rs = await fetch('/api/rtsp/start', { method: 'POST' }); const jj = await rs.json(); document.getElementById('mediamtxStatus').textContent += ' • RTSP ' + (rs.ok ? 'started' : 'error'); } catch {}
+            } catch (e) {
+              document.getElementById('mediamtxStatus').textContent = e.message;
+            }
+          }
           async function playWebRtcNative() {
             try {
               const path = String(document.getElementById('webrtcPath').value || 'ds-test').trim();
