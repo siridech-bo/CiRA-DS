@@ -1330,3 +1330,31 @@ app.post("/api/mediamtx/save", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.post("/api/mediamtx/save_host", async (req, res) => {
+  try {
+    const c = String((req.body && req.body.content) || "");
+    if (!c) return res.status(400).json({ error: "content required" });
+    const p = "/data/mediamtx.yml";
+    const tmp = "/data/ds/configs/mediamtx.yml";
+    await fs.promises.mkdir(path.dirname(tmp), { recursive: true });
+    await fs.promises.writeFile(tmp, c, "utf8");
+    await dockerRequest("DELETE", "/containers/mediamtx_write?force=true");
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", `cp -f ${tmp} ${p} && chmod 644 ${p} && echo OK`], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
+    let created = await dockerRequest("POST", "/containers/create?name=mediamtx_write", body);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(DS_IMAGE)}`);
+      await dockerRequest("DELETE", "/containers/mediamtx_write?force=true");
+      created = await dockerRequest("POST", "/containers/create?name=mediamtx_write", body);
+    }
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
+    const start = await dockerRequest("POST", "/containers/mediamtx_write/start");
+    if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
+    const logs = await dockerRequest("GET", "/containers/mediamtx_write/logs?stdout=1&stderr=1&tail=200");
+    await dockerRequest("POST", "/containers/mediamtx_write/stop");
+    await dockerRequest("DELETE", "/containers/mediamtx_write?force=true");
+    res.json({ ok: true, path: p, bytes: Buffer.byteLength(c), logs: logs.body || "" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
