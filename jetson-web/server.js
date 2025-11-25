@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000; // fallback for local runs; compose sets PORT=3000
+console.log("Starting Jetson Web backend, node=" + process.version + ", PORT=" + PORT);
 function isJetsonHost() {
   try {
     if (os.platform() !== "linux") return false;
