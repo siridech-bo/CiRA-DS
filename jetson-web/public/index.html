@@ -377,7 +377,7 @@
     </div>
   </div>
   <div class="grid" id="tab-testing-python" style="display:none">
-    <div class="card">
+    <div class="card" style="display:none">
       <h2>Backend</h2>
       <div class="row">
         <button onclick="startDsPythonExample()">Start Backend (Example)</button>
@@ -386,7 +386,7 @@
       </div>
       <div class="status" id="pyExampleBackendStatus"></div>
     </div>
-    <div class="card">
+    <div class="card" style="display:none">
       <h2>Container Init (3 steps)</h2>
       <div class="row">
         <button onclick="removeBackendSimple()">1) Remove Backend</button>
@@ -397,7 +397,7 @@
       <div class="status" id="runBackendStatus"></div>
       <div class="status" id="execBackendStatus"></div>
     </div>
-    <div class="card">
+    <div class="card" style="display:none">
       <h2>Run Python Example</h2>
       <input id="pyExampleInput" placeholder="/opt/.../sample_720p.h264" value="/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264" />
       <div class="row">
@@ -421,7 +421,7 @@
       <video id="pyExampleVideo" playsinline controls muted></video>
       <div class="status" id="pyExampleHlsStatus"></div>
     </div>
-    <div class="card">
+    <div class="card" style="display:none">
       <h2>Step Runner</h2>
       <div class="row">
         <button onclick="runAliasStep()">Link pyds alias</button>
