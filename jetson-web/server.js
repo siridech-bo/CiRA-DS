@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000; // fallback for local runs; compose sets PORT=3000
+const PORT = process.env.PORT || 3000; // fallback for local runs; compose sets PORT=3000
 console.log("Starting Jetson Web backend, node=" + process.version + ", PORT=" + PORT);
 function isJetsonHost() {
   try {
@@ -661,7 +661,18 @@ app.post("/api/docker/tag", async (req, res) => {
 
 const server = http.createServer(app);
 server.listen(PORT, () => {
-  console.log(`Web server running at http://localhost:${PORT}/`);
+  try {
+    const nets = os.networkInterfaces();
+    let ip = "localhost";
+    for (const k of Object.keys(nets)) {
+      const arr = nets[k] || [];
+      for (const a of arr) { if (a && a.family === "IPv4" && !a.internal) { ip = a.address; break; } }
+      if (ip !== "localhost") break;
+    }
+    console.log(`Web server running at http://${ip}:${PORT}/`);
+  } catch {
+    console.log(`Web server running on port ${PORT}`);
+  }
 });
 
 let WebSocketServer = null; let nodePty = null;
