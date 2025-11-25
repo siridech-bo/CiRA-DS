@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import os from "os";
 import { spawnSync, spawn } from "child_process";
+import { createRequire } from "module";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -667,18 +668,39 @@ try {
   const wsMod = await import("ws");
   WebSocketServer = wsMod.WebSocketServer || wsMod.Server || null;
 } catch {}
+if (!WebSocketServer) {
+  try {
+    const req = createRequire(import.meta.url);
+    const wsMod = req("ws");
+    WebSocketServer = wsMod.WebSocketServer || wsMod.Server || null;
+  } catch {}
+}
 try {
   nodePty = await import("node-pty");
 } catch {}
 if (!(WebSocketServer && nodePty && nodePty.spawn)) {
   try {
     const npmExe = process.platform === "win32" ? "npm.cmd" : "npm";
-    const r = spawnSync(npmExe, ["install", "ws", "node-pty", "--no-save"], { cwd: __dirname, stdio: "inherit" });
-    if (r && r.status === 0) {
+    let okInstall = false;
+    let r = spawnSync(npmExe, ["install", "ws", "node-pty", "--no-save"], { cwd: __dirname, stdio: "inherit" });
+    okInstall = !!(r && r.status === 0);
+    if (!okInstall) {
+      const yarnExe = process.platform === "win32" ? "yarn.cmd" : "yarn";
+      r = spawnSync(yarnExe, ["add", "ws", "node-pty"], { cwd: __dirname, stdio: "inherit" });
+      okInstall = !!(r && r.status === 0);
+    }
+    if (okInstall) {
       try {
         const wsMod2 = await import("ws");
         WebSocketServer = wsMod2.WebSocketServer || wsMod2.Server || null;
       } catch {}
+      if (!WebSocketServer) {
+        try {
+          const req = createRequire(import.meta.url);
+          const wsMod2 = req("ws");
+          WebSocketServer = wsMod2.WebSocketServer || wsMod2.Server || null;
+        } catch {}
+      }
       try {
         nodePty = await import("node-pty");
       } catch {}
@@ -687,6 +709,7 @@ if (!(WebSocketServer && nodePty && nodePty.spawn)) {
 }
 if (WebSocketServer && nodePty && nodePty.spawn) {
   const wss = new WebSocketServer({ server, path: "/ws/terminal" });
+  console.log("Web terminal: PTY enabled at /ws/terminal");
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -l"];
@@ -704,6 +727,7 @@ if (WebSocketServer && nodePty && nodePty.spawn) {
 }
 else if (WebSocketServer) {
   const wss = new WebSocketServer({ server, path: "/ws/terminal" });
+  console.log("Web terminal: stdio fallback at /ws/terminal");
   wss.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const cmd = process.platform === "win32" ? shell : shell;
@@ -720,6 +744,9 @@ else if (WebSocketServer) {
     });
     ws.on("close", () => { try { ch.kill("SIGTERM"); } catch {} });
   });
+}
+else {
+  console.log("Web terminal: disabled (ws missing)");
 }
 
 const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
