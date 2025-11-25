@@ -37,6 +37,8 @@ RUN set -eux; \
       cp /tmp/docker/docker /usr/local/bin/docker || true; \
       rm -rf /tmp/docker* /var/lib/apt/lists/*; \
     fi; \
+    apt-get update && apt-get install -y --no-install-recommends build-essential python3 make g++; \
+    npm install --no-audit --no-fund node-pty@^1.0.0 || true; \
     docker -v || true
 
 ENV PORT=80
