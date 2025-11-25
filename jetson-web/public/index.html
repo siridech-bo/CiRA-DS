@@ -1009,7 +1009,7 @@
     async function logsDsPythonExampleRun() { try { const cmd = "p=/app/configs/ds_py_rtsp_out.txt; q=/data/ds/configs/ds_py_rtsp_out.txt; if [ -f \"$p\" ]; then tail -n 200 \"$p\"; elif [ -f \"$q\" ]; then tail -n 200 \"$q\"; else echo NO_LOG; fi"; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('pyExampleRunStatus').textContent = out; } catch (e) { document.getElementById('pyExampleRunStatus').textContent = e.message; } }
           function makeTerm(elId, statusId, endpoint) {
             const el = document.getElementById(elId);
-            const t = new window.Terminal({ rendererType: 'canvas', cursorBlink: true, fontFamily: 'Consolas, Menlo, Monaco, monospace', fontSize: 14, lineHeight: 1.2, letterSpacing: 0, allowTransparency: false, theme: { background: '#000000', foreground: '#d0d0d0' }, scrollback: 5000 });
+            const t = new window.Terminal({ rendererType: 'canvas', cursorBlink: true, convertEol: true, fontFamily: 'Consolas, Menlo, Monaco, monospace', fontSize: 14, lineHeight: 1.2, letterSpacing: 0, allowTransparency: false, theme: { background: '#000000', foreground: '#d0d0d0' }, scrollback: 5000 });
             t.open(el);
             try { if (window.FitAddon && window.FitAddon.FitAddon) { const fit = new window.FitAddon.FitAddon(); t.loadAddon(fit); fit.fit(); } } catch {}
             const proto = (location.protocol === 'https:' ? 'wss://' : 'ws://');

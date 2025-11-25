@@ -711,11 +711,11 @@ if (!(WebSocketServer && nodePty && nodePty.spawn)) {
 let TERM_MODE = "disabled";
 if (WebSocketServer && nodePty && nodePty.spawn) {
   const wssHost = new WebSocketServer({ server, path: "/ws/terminal" });
-  console.log("Web terminal: PTY host at /ws/terminal");
+  console.log("Web terminal: PTY fallback container/host at /ws/terminal");
   TERM_MODE = "pty";
   wssHost.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
-    const args = process.platform === "win32" ? [] : ["-lc", "bash -il"];
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -il"];
     const p = nodePty.spawn(shell, args, { name: "xterm-color", cols: 80, rows: 24, cwd: process.cwd(), env: process.env });
     p.onData((d) => { try { ws.send(d); } catch {} });
     p.onExit(() => { try { ws.close(); } catch {} });
@@ -748,12 +748,12 @@ if (WebSocketServer && nodePty && nodePty.spawn) {
 }
 else if (WebSocketServer) {
   const wssHost = new WebSocketServer({ server, path: "/ws/terminal" });
-  console.log("Web terminal: stdio host at /ws/terminal");
+  console.log("Web terminal: stdio fallback container/host at /ws/terminal");
   TERM_MODE = "stdio";
   wssHost.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const cmd = process.platform === "win32" ? shell : shell;
-    const args = process.platform === "win32" ? [] : ["-lc", "bash -il"];
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -i ds_python bash -il || bash -il"];
     const ch = spawn(cmd, args, { cwd: process.cwd(), env: process.env });
     try { ws.send("\r\n[WebTerminal] Connected (non-pty mode).\r\n"); } catch {}
     ch.stdout.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
