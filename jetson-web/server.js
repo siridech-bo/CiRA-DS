@@ -710,12 +710,29 @@ if (!(WebSocketServer && nodePty && nodePty.spawn)) {
 }
 let TERM_MODE = "disabled";
 if (WebSocketServer && nodePty && nodePty.spawn) {
-  const wss = new WebSocketServer({ server, path: "/ws/terminal" });
-  console.log("Web terminal: PTY enabled at /ws/terminal");
+  const wssHost = new WebSocketServer({ server, path: "/ws/terminal" });
+  console.log("Web terminal: PTY host at /ws/terminal");
   TERM_MODE = "pty";
-  wss.on("connection", (ws) => {
+  wssHost.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
-    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -l"];
+    const args = process.platform === "win32" ? [] : ["-lc", "bash -il"];
+    const p = nodePty.spawn(shell, args, { name: "xterm-color", cols: 80, rows: 24, cwd: process.cwd(), env: process.env });
+    p.onData((d) => { try { ws.send(d); } catch {} });
+    p.onExit(() => { try { ws.close(); } catch {} });
+    const iv = setInterval(() => { try { ws.ping(); } catch {} }, 30000);
+    ws.on("message", (msg) => {
+      let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
+      if (obj && obj.type === "input" && typeof obj.data === "string") { p.write(obj.data); return; }
+      if (obj && obj.type === "resize" && obj.cols && obj.rows) { try { p.resize(Number(obj.cols), Number(obj.rows)); } catch {} return; }
+      p.write(String(msg));
+    });
+    ws.on("close", () => { try { p.kill(); } catch {} try { clearInterval(iv); } catch {} });
+  });
+  const wssCont = new WebSocketServer({ server, path: "/ws/terminal/container" });
+  console.log("Web terminal: PTY container at /ws/terminal/container");
+  wssCont.on("connection", (ws) => {
+    const shell = process.platform === "win32" ? "powershell.exe" : "bash";
+    const args = process.platform === "win32" ? [] : ["-lc", "docker exec -it ds_python bash -l || bash -il"];
     const p = nodePty.spawn(shell, args, { name: "xterm-color", cols: 80, rows: 24, cwd: process.cwd(), env: process.env });
     p.onData((d) => { try { ws.send(d); } catch {} });
     p.onExit(() => { try { ws.close(); } catch {} });
@@ -730,10 +747,29 @@ if (WebSocketServer && nodePty && nodePty.spawn) {
   });
 }
 else if (WebSocketServer) {
-  const wss = new WebSocketServer({ server, path: "/ws/terminal" });
-  console.log("Web terminal: stdio fallback at /ws/terminal");
+  const wssHost = new WebSocketServer({ server, path: "/ws/terminal" });
+  console.log("Web terminal: stdio host at /ws/terminal");
   TERM_MODE = "stdio";
-  wss.on("connection", (ws) => {
+  wssHost.on("connection", (ws) => {
+    const shell = process.platform === "win32" ? "powershell.exe" : "bash";
+    const cmd = process.platform === "win32" ? shell : shell;
+    const args = process.platform === "win32" ? [] : ["-lc", "bash -il"];
+    const ch = spawn(cmd, args, { cwd: process.cwd(), env: process.env });
+    try { ws.send("\r\n[WebTerminal] Connected (non-pty mode).\r\n"); } catch {}
+    ch.stdout.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
+    ch.stderr.on("data", (d) => { try { ws.send(d.toString()); } catch {} });
+    ch.on("close", () => { try { ws.close(); } catch {} });
+    const iv = setInterval(() => { try { ws.ping(); } catch {} }, 30000);
+    ws.on("message", (msg) => {
+      let obj = null; try { obj = JSON.parse(String(msg)); } catch {}
+      const data = (obj && obj.type === "input") ? String(obj.data || "") : String(msg || "");
+      try { ch.stdin.write(data); } catch {}
+    });
+    ws.on("close", () => { try { ch.kill("SIGTERM"); } catch {} try { clearInterval(iv); } catch {} });
+  });
+  const wssCont = new WebSocketServer({ server, path: "/ws/terminal/container" });
+  console.log("Web terminal: stdio container at /ws/terminal/container");
+  wssCont.on("connection", (ws) => {
     const shell = process.platform === "win32" ? "powershell.exe" : "bash";
     const cmd = process.platform === "win32" ? shell : shell;
     const args = process.platform === "win32" ? [] : ["-lc", "docker exec -i ds_python bash -il || bash -il"];
@@ -756,7 +792,7 @@ else {
 }
 
 app.get("/api/terminal/health", (_req, res) => {
-  res.json({ ws: !!WebSocketServer, mode: TERM_MODE, path: "/ws/terminal" });
+  res.json({ ws: !!WebSocketServer, mode: TERM_MODE, endpoints: ["/ws/terminal", "/ws/terminal/container"] });
 });
 
 const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
