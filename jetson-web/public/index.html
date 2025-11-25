@@ -455,7 +455,6 @@
           <div class="row">
             <button onclick="openWebTerminal()">Open Terminal</button>
             <button onclick="closeWebTerminal()">Close Terminal</button>
-            <button id="openContainerHidden" onclick="openContainerTerminalHidden()" style="display:none">Open Container Terminal (hidden)</button>
           </div>
           <div class="status" id="termStatus"></div>
           <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
@@ -1028,7 +1027,6 @@
             } catch (e) { document.getElementById(statusId || 'termStatus').textContent = e.message; }
           }
           function closeWebTerminal() { try { const o = window._term; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term = null; } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
-          function openContainerTerminalHidden() { openWebTerminal('/ws/terminal/container', 'termHost', 'termStatus', '_term'); }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
     async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
