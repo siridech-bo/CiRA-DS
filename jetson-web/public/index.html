@@ -1101,7 +1101,7 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
             try {
               const path = String(document.getElementById('webrtcPath').value || 'ds-test').trim();
               const proto = (location.protocol === 'https:' ? 'https://' : 'http://');
-              const url = proto + location.hostname + ':8889/whep/' + encodeURIComponent(path);
+              const url = proto + location.hostname + ':8889/' + encodeURIComponent(path) + '/whep';
               const vid = document.getElementById('webrtcVideo');
               const pc = new RTCPeerConnection({ iceServers: [] });
               pc.addTransceiver('video', { direction: 'recvonly' });
