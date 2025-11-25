@@ -1358,3 +1358,25 @@ app.post("/api/mediamtx/save_host", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.get("/api/mediamtx/read_host", async (_req, res) => {
+  try {
+    await dockerRequest("DELETE", "/containers/mediamtx_read?force=true");
+    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", "cat /data/mediamtx.yml"], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
+    let created = await dockerRequest("POST", "/containers/create?name=mediamtx_read", body);
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) {
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(DS_IMAGE)}`);
+      await dockerRequest("DELETE", "/containers/mediamtx_read?force=true");
+      created = await dockerRequest("POST", "/containers/create?name=mediamtx_read", body);
+    }
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "create_failed", detail: created.body });
+    const start = await dockerRequest("POST", "/containers/mediamtx_read/start");
+    if (!(start.statusCode >= 200 && start.statusCode < 300)) return res.status(500).json({ error: "start_failed", detail: start.body });
+    const logs = await dockerRequest("GET", "/containers/mediamtx_read/logs?stdout=1&stderr=1&tail=200");
+    await dockerRequest("POST", "/containers/mediamtx_read/stop");
+    await dockerRequest("DELETE", "/containers/mediamtx_read?force=true");
+    res.type("text/plain").send(logs.body || "");
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
