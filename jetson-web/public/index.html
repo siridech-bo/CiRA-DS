@@ -997,7 +997,23 @@
     async function loadPgie() { try { const p = document.getElementById('pgiePath').value || ''; const r = await fetch('/api/configs/read?path=' + encodeURIComponent(p)); const j = await r.json(); if (j.content !== undefined) { document.getElementById('pgiePreview').value = j.content; document.getElementById('pgieStatus').textContent = 'Loaded'; } else { document.getElementById('pgieStatus').textContent = JSON.stringify(j); } } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
     async function savePgie() { try { const p = document.getElementById('pgiePath').value || '/app/configs/pgie_resnet10.txt'; const content = document.getElementById('pgiePreview').value || ''; const r = await fetch('/api/configs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content }) }); const j = await r.json(); document.getElementById('pgieStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('pgieStatus').textContent = e.message; } }
     async function logsDsPythonExampleRun() { try { const cmd = "p=/app/configs/ds_py_rtsp_out.txt; q=/data/ds/configs/ds_py_rtsp_out.txt; if [ -f \"$p\" ]; then tail -n 200 \"$p\"; elif [ -f \"$q\" ]; then tail -n 200 \"$q\"; else echo NO_LOG; fi"; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('pyExampleRunStatus').textContent = out; } catch (e) { document.getElementById('pyExampleRunStatus').textContent = e.message; } }
-    function openWebTerminal() { try { if (window._term) { return; } const el = document.getElementById('termHost'); const t = new window.Terminal({ cursorBlink: true }); t.open(el); const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/terminal'); ws.onopen = () => { document.getElementById('termStatus').textContent = 'Connected'; }; ws.onmessage = (ev) => { t.write(typeof ev.data === 'string' ? ev.data : ''); }; ws.onclose = () => { document.getElementById('termStatus').textContent = 'Closed'; try { window._term = null; } catch{} }; t.onData(d => { try { ws.send(JSON.stringify({ type: 'input', data: d })); } catch {} }); window._term = { t, ws }; window.addEventListener('resize', () => { try { const cols = t.cols, rows = t.rows; ws.send(JSON.stringify({ type: 'resize', cols, rows })); } catch{} }); } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
+          function openWebTerminal() {
+            try {
+              if (window._term) { return; }
+              const el = document.getElementById('termHost');
+              const t = new window.Terminal({ cursorBlink: true });
+              t.open(el);
+              const proto = (location.protocol === 'https:' ? 'wss://' : 'ws://');
+              const ws = new WebSocket(proto + location.host + '/ws/terminal');
+              ws.onopen = () => { document.getElementById('termStatus').textContent = 'Connected'; };
+              ws.onmessage = (ev) => { try { t.write(typeof ev.data === 'string' ? ev.data : ''); } catch {} };
+              ws.onerror = (e) => { document.getElementById('termStatus').textContent = 'Error: WebSocket'; };
+              ws.onclose = () => { document.getElementById('termStatus').textContent = 'Closed'; try { window._term = null; } catch{} };
+              t.onData(d => { try { if (ws.readyState === 1) { ws.send(JSON.stringify({ type: 'input', data: d })); } } catch {} });
+              window._term = { t, ws };
+              window.addEventListener('resize', () => { try { const cols = t.cols, rows = t.rows; if (ws.readyState === 1) { ws.send(JSON.stringify({ type: 'resize', cols, rows })); } } catch{} });
+            } catch (e) { document.getElementById('termStatus').textContent = e.message; }
+          }
     function closeWebTerminal() { try { const o = window._term; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term = null; } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
