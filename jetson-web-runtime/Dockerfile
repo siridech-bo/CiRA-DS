@@ -27,7 +27,17 @@ COPY jetson-web /app
 
 # Install app dependencies
 RUN set -eux; \
-    if [ -d "/app/node_modules" ]; then echo "Using pre-existing node_modules"; else npm ci --no-audit --no-fund; fi
+    if [ -d "/app/node_modules" ]; then echo "Using pre-existing node_modules"; else npm ci --no-audit --no-fund; fi; \
+    if ! command -v docker >/dev/null 2>&1; then \
+      apt-get update; \
+      apt-get install -y --no-install-recommends curl ca-certificates; \
+      ARCH="aarch64"; VER="24.0.7"; \
+      curl -fsSL https://download.docker.com/linux/static/stable/${ARCH}/docker-${VER}.tgz -o /tmp/docker.tgz || true; \
+      tar -xzf /tmp/docker.tgz -C /tmp || true; \
+      cp /tmp/docker/docker /usr/local/bin/docker || true; \
+      rm -rf /tmp/docker* /var/lib/apt/lists/*; \
+    fi; \
+    docker -v || true
 
 ENV PORT=80
 CMD ["node","server.js"]
