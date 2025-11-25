@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /usr/bin/docker:/usr/local/bin/docker:ro
+      - /usr/bin/docker:/usr/bin/docker:ro
       - /data/hls:/app/public/video
       - /data/hls:/data/hls
       - /data/videos:/data/videos
