@@ -460,6 +460,27 @@
           <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
           <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/dist/xterm-addon-fit.js"></script>
         </div>
+        <div class="card">
+          <h2>Quick Commands</h2>
+          <div class="row">
+            <button onclick="copyQuickCmds()">Copy All</button>
+          </div>
+          <pre id="quickCmds" style="white-space:pre-wrap;border:1px solid #ccc;padding:8px;background:#f9f9f9">
+ - sudo docker rm -f ds_python || true
+ 
+ - sudo docker run -d --name ds_python --network host --runtime nvidia -v /data/videos:/data/videos -v /data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps -v /data/ds/apps/pyds_ext:/workspace/pyds_ext siridech2/deepstream-l4t:pyds-dev
+ 
+ - sudo docker exec -it ds_python bash
+ 
+ - ln -s /workspace/pyds_ext /workspace/pyds
+ 
+ - export PYTHONPATH=/workspace:$PYTHONPATH
+ 
+ - cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out
+ 
+ -  python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264 -c H264
+          </pre>
+        </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
     <div class="card">
@@ -1027,6 +1048,7 @@
             } catch (e) { document.getElementById(statusId || 'termStatus').textContent = e.message; }
           }
           function closeWebTerminal() { try { const o = window._term; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term = null; } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
+          function copyQuickCmds() { try { const el = document.getElementById('quickCmds'); const txt = el.textContent || ''; navigator.clipboard.writeText(txt); } catch {} }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
     async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
