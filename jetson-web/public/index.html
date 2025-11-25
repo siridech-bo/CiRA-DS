@@ -1015,7 +1015,10 @@
           }
           async function openWebTerminal(endpoint, elId, statusId, key) {
             try {
-              if (window[key || '_term']) { return; }
+              try {
+                const o = window[key || '_term'];
+                if (o) { try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window[key || '_term'] = null; }
+              } catch {}
               let mode = 'unknown';
               try { const r = await fetch('/api/terminal/health'); const j = await r.json(); mode = String(j && j.mode || 'unknown'); } catch {}
               const path = endpoint || '/ws/terminal';
