@@ -481,6 +481,15 @@ cd /opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/dee
 python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264 -c H264  # run sample; RTSP at rtsp://127.0.0.1:8554/ds-test
           </pre>
         </div>
+        <div class="card">
+          <h2>RTSP (WebRTC) Preview</h2>
+          <div class="row">
+            <button onclick="openWebRtcPlayer()">Open Player</button>
+            <button onclick="reloadWebRtcPlayer()">Reload</button>
+          </div>
+          <iframe id="webrtcFrame" style="width:100%;height:360px;border:1px solid #ccc"></iframe>
+          <div class="status" id="webrtcStatus"></div>
+        </div>
   </div>
   <div class="grid" id="tab-utility" style="display:none">
     <div class="card">
@@ -1049,6 +1058,9 @@ python3 deepstream_test1_rtsp_out.py -i /opt/nvidia/deepstream/deepstream-6.0/sa
           }
           function closeWebTerminal() { try { const o = window._term; if (!o) return; try { o.ws.close(); } catch{} try { o.t.dispose(); } catch{} window._term = null; } catch (e) { document.getElementById('termStatus').textContent = e.message; } }
           function copyQuickCmds() { try { const el = document.getElementById('quickCmds'); const txt = el.textContent || ''; navigator.clipboard.writeText(txt); } catch {} }
+          function _webrtcUrl() { const proto = (location.protocol === 'https:' ? 'https://' : 'http://'); return proto + location.hostname + ':8889/'; }
+          function openWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); document.getElementById('webrtcStatus').textContent = 'Opened'; } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
+          function reloadWebRtcPlayer() { try { const el = document.getElementById('webrtcFrame'); el.src = _webrtcUrl(); } catch (e) { document.getElementById('webrtcStatus').textContent = e.message; } }
     async function removeBackendSimple() { try { const r = await fetch('/api/dspython/remove', { method: 'POST' }); const j = await r.json(); document.getElementById('rmBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rmBackendStatus').textContent = e.message; } }
     async function runBackendSimple() { try { const r = await fetch('/api/dspython/start_example', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); const j = await r.json(); document.getElementById('runBackendStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('runBackendStatus').textContent = e.message; } }
     async function execShellSimple() { try { const cmd = 'echo SHELL_READY && whoami && ls -ld /workspace /workspace/pyds_ext /workspace/pyds && python3 -V && echo PYTHONPATH=$PYTHONPATH'; const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) }); const t = await r.text(); let out = ''; try { out = atob(t.trim()); } catch { out = t; } document.getElementById('execBackendStatus').textContent = out; } catch (e) { document.getElementById('execBackendStatus').textContent = e.message; } }
