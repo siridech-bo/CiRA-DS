@@ -461,6 +461,16 @@
           <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/dist/xterm-addon-fit.js"></script>
         </div>
         <div class="card">
+          <h2>Container File Editor</h2>
+          <input id="pyFilePath" style="width:100%" value="/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py" />
+          <div class="row">
+            <button onclick="loadContainerFile()">Load</button>
+            <button onclick="saveContainerFile()">Save</button>
+          </div>
+          <textarea id="pyFileText" rows="18" style="width:100%"></textarea>
+          <div class="status" id="pyFileStatus"></div>
+        </div>
+        <div class="card">
           <h2>Quick Commands</h2>
           <div class="row">
             <button onclick="copyQuickCmds()">Copy All</button>
@@ -1096,6 +1106,34 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
             } catch (e) {
               document.getElementById('mediamtxStatus').textContent = e.message;
             }
+          }
+          function _b64enc(u) { try { return btoa(unescape(encodeURIComponent(u))); } catch (e) { try { return btoa(u); } catch { return ''; } } }
+          function _b64dec(s) { try { return decodeURIComponent(escape(atob(s))); } catch (e) { try { return atob(s); } catch { return s; } } }
+          async function loadContainerFile() {
+            try {
+              const p = String(document.getElementById('pyFilePath').value || '').trim();
+              if (!p) { document.getElementById('pyFileStatus').textContent = 'Path required'; return; }
+              const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: `cat "${p}" || echo __ERR__`, wait_ms: 400 }) });
+              const t = await r.text();
+              const out = _b64dec(t.trim());
+              if (/__ERR__/.test(out)) { document.getElementById('pyFileStatus').textContent = 'Read error'; return; }
+              document.getElementById('pyFileText').value = out;
+              document.getElementById('pyFileStatus').textContent = 'Loaded';
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
+          }
+          async function saveContainerFile() {
+            try {
+              const p = String(document.getElementById('pyFilePath').value || '').trim();
+              const txt = String(document.getElementById('pyFileText').value || '');
+              if (!p) { document.getElementById('pyFileStatus').textContent = 'Path required'; return; }
+              const b64 = _b64enc(txt);
+              const ps = p.replace(/'/g, "'\"'\"'");
+              const cmd = `python3 - <<'PY'\nimport base64,sys\nopen('${ps}','wb').write(base64.b64decode('${b64}'))\nprint('OK')\nPY`;
+              const r = await fetch('/api/dspython/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, wait_ms: 600 }) });
+              const t = await r.text();
+              const out = _b64dec(t.trim());
+              document.getElementById('pyFileStatus').textContent = out || 'Saved';
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
           }
           async function playWebRtcNative() {
             try {
