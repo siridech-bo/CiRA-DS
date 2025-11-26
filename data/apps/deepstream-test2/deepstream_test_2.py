@@ -160,6 +160,27 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
             break
     return Gst.PadProbeReturn.OK	
 
+def bus_call_loop(bus, message, ctx):
+    t = message.type
+    if t == Gst.MessageType.EOS:
+        try:
+            pipeline = ctx[1] if isinstance(ctx, tuple) else ctx.get('pipeline')
+        except Exception:
+            pipeline = None
+        if pipeline:
+            pipeline.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, 0)
+            pipeline.set_state(Gst.State.PLAYING)
+        return True
+    if t == Gst.MessageType.ERROR:
+        try:
+            loop = ctx[0] if isinstance(ctx, tuple) else ctx.get('loop')
+        except Exception:
+            loop = None
+        if loop:
+            loop.quit()
+        return False
+    return True
+
 def main(args):
     # Check input arguments
     if(len(args)<2):
@@ -362,7 +383,7 @@ def main(args):
 
     bus = pipeline.get_bus()
     bus.add_signal_watch()
-    bus.connect ("message", bus_call, loop)
+    bus.connect ("message", bus_call_loop, (loop, pipeline))
 
     # Lets add probe to get informed of the meta data generated, we add probe to
     # the sink pad of the osd element, since by that time, the buffer would have
