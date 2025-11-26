@@ -472,6 +472,10 @@
             <button onclick="uploadContainerFileMcp()">Upload (MCP)</button>
             <button onclick="tailLogsMcp()">Tail Logs (MCP)</button>
           </div>
+          <div class="row">
+            <input id="localFileInput" type="file" />
+            <button onclick="uploadLocalFileMcp()">Upload Local (MCP)</button>
+          </div>
           <textarea id="pyFileText" rows="18" style="width:100%"></textarea>
           <div class="status" id="pyFileStatus"></div>
         </div>
@@ -1174,6 +1178,23 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
               const r = await fetch('/api/mcp/tail_logs?tail=1200');
               const t = await r.text();
               document.getElementById('pyFileStatus').textContent = t;
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
+          }
+          async function uploadLocalFileMcp() {
+            try {
+              const p = String(document.getElementById('pyFilePath').value || '').trim();
+              const root = '/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/';
+              if (!p || !p.startsWith(root)) { document.getElementById('pyFileStatus').textContent = 'Invalid path'; return; }
+              const inp = document.getElementById('localFileInput');
+              if (!inp || !inp.files || !inp.files[0]) { document.getElementById('pyFileStatus').textContent = 'Select local file'; return; }
+              const file = inp.files[0];
+              const content = await new Promise((resolve) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result||'')); fr.onerror = () => resolve(''); fr.readAsText(file); });
+              const enc = new TextEncoder();
+              const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(content));
+              const sha256 = Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+              const r = await fetch('/api/mcp/upload_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content, sha256 }) });
+              const j = await r.json();
+              document.getElementById('pyFileStatus').textContent = r.ok ? ('Uploaded ' + (j.bytes||0) + ' bytes from local') : (j && j.error ? j.error : 'Upload error');
             } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
           }
           async function playWebRtcNative() {
