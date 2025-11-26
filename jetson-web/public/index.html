@@ -469,6 +469,8 @@
             <button onclick="loadContainerFile()">Load</button>
             <button onclick="saveContainerFile()">Save</button>
             <button onclick="saveContainerFileAs()">Save As</button>
+            <button onclick="uploadContainerFileMcp()">Upload (MCP)</button>
+            <button onclick="tailLogsMcp()">Tail Logs (MCP)</button>
           </div>
           <textarea id="pyFileText" rows="18" style="width:100%"></textarea>
           <div class="status" id="pyFileStatus"></div>
@@ -1150,6 +1152,28 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
               const t = await r.text();
               const out = _b64dec(t.trim());
               document.getElementById('pyFileStatus').textContent = out || 'Saved As';
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
+          }
+          async function uploadContainerFileMcp() {
+            try {
+              const p = String(document.getElementById('pyFilePath').value || '').trim();
+              const content = String(document.getElementById('pyFileText').value || '');
+              const root = '/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/';
+              if (!p || !p.startsWith(root)) { document.getElementById('pyFileStatus').textContent = 'Invalid path'; return; }
+              const enc = new TextEncoder();
+              const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(content));
+              const hashArr = Array.from(new Uint8Array(hashBuf));
+              const sha256 = hashArr.map(b => b.toString(16).padStart(2,'0')).join('');
+              const r = await fetch('/api/mcp/upload_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, content, sha256 }) });
+              const j = await r.json();
+              document.getElementById('pyFileStatus').textContent = r.ok ? ('Uploaded ' + (j.bytes||0) + ' bytes') : (j && j.error ? j.error : 'Upload error');
+            } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
+          }
+          async function tailLogsMcp() {
+            try {
+              const r = await fetch('/api/mcp/tail_logs?tail=1200');
+              const t = await r.text();
+              document.getElementById('pyFileStatus').textContent = t;
             } catch (e) { document.getElementById('pyFileStatus').textContent = e.message; }
           }
           async function playWebRtcNative() {
