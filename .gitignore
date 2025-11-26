@@ -1,2 +1,4 @@
 jetson-web.tar
 *.tar
+backup example python/deepstream_python_apps
+data/deepstream_python_apps
