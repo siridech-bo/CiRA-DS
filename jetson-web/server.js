@@ -993,6 +993,94 @@ app.get("/api/mcp/tail_logs", async (req, res) => {
   }
 });
 
+app.post("/api/mcp/validate_python", async (req, res) => {
+  try {
+    const p = _normalizeContainerPath((req.body && req.body.path) || "");
+    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    const info = await dockerRequest("GET", "/containers/ds_python/json");
+    let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+    if (!running) return res.status(400).json({ error: "ds_python not running" });
+    const ps = p.replace(/'/g, "'\"'\"'");
+    const cmd = `python3 -m py_compile '${ps}' && echo OK || echo ERR`;
+    const created = await dockerRequest("POST", "/containers/ds_python/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] });
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
+    let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+    if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
+    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+    if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
+    const out = Buffer.from(started.body || "", "binary").toString();
+    if (/\bOK\b/.test(out)) return res.json({ status: "ok" });
+    return res.status(400).json({ status: "error", output: out });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/mcp/test_python", async (req, res) => {
+  try {
+    const p = _normalizeContainerPath((req.body && req.body.path) || "");
+    let content = (req.body && req.body.content);
+    const sha256 = String((req.body && req.body.sha256) || "").trim();
+    const validate = !!(req.body && req.body.validate !== false);
+    const input = String((req.body && req.body.input) || "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264");
+    const codec = String((req.body && req.body.codec) || "H264");
+    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    const info = await dockerRequest("GET", "/containers/ds_python/json");
+    let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+    if (!running) return res.status(400).json({ error: "ds_python not running" });
+    let bytes = 0;
+    if (content !== undefined && content !== null) {
+      const enc = Buffer.isBuffer(content) ? content.toString("base64") : Buffer.from(String(content), "utf8").toString("base64");
+      const ps = p.replace(/'/g, "'\"'\"'");
+      const shaExpr = sha256 ? `\nimport hashlib\nassert hashlib.sha256(d).hexdigest()==\'${sha256.replace(/'/g,"'\"'\"'")}\', 'sha256 mismatch'\n` : "\n";
+      const py = `python3 - <<'PY'\nimport base64, os, tempfile\np='${ps}'\nd=base64.b64decode('${enc}')\n${shaExpr}dir=os.path.dirname(p) or '.'\nos.makedirs(dir, exist_ok=True)\nfd,tmp=tempfile.mkstemp(prefix='.upload_', dir=dir)\nos.write(fd,d); os.close(fd)\nos.replace(tmp,p)\nprint('OK', len(d))\nPY`;
+      const created = await dockerRequest("POST", "/containers/ds_python/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", py] });
+      if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
+      let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+      if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
+      const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+      if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
+      const out = Buffer.from(started.body || "", "binary").toString();
+      const m = out.match(/OK\s+(\d+)/); if (m) { bytes = Number(m[1]||0) };
+    }
+    if (validate) {
+      const ps = p.replace(/'/g, "'\"'\"'");
+      const vcmd = `python3 -m py_compile '${ps}' && echo OK || echo ERR`;
+      const vcreated = await dockerRequest("POST", "/containers/ds_python/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", vcmd] });
+      if (!(vcreated.statusCode >= 200 && vcreated.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: vcreated.body });
+      let vid = ""; try { vid = JSON.parse(vcreated.body || "{}").Id || ""; } catch {}
+      if (!vid) return res.status(500).json({ error: "exec_id_missing", detail: vcreated.body });
+      const vstarted = await dockerRequest("POST", `/exec/${vid}/start`, { Detach: false, Tty: true });
+      if (!(vstarted.statusCode >= 200 && vstarted.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: vstarted.body });
+      const vout = Buffer.from(vstarted.body || "", "binary").toString();
+      if (!/\bOK\b/.test(vout)) return res.status(400).json({ status: "error", output: vout });
+    }
+    const dir = p.replace(/\/[^/]+$/, "");
+    const base = p.split("/").pop();
+    let args = "";
+    if (/deepstream_test1_rtsp_out\.py$/.test(base)) args = ` -i ${input} -c ${codec}`;
+    else if (/deepstream_test_2\.py$/.test(base)) args = ` ${input}`;
+    const cmd = [
+      `cd '${dir.replace(/'/g,"'\"'\"'")}'`,
+      `pkill -f '${base.replace(/'/g,"'\"'\"'")}' || true`,
+      "mkdir -p /data/ds/configs",
+      ": > /data/ds/configs/ds_py_rtsp_out.txt",
+      `nohup env PYTHONUNBUFFERED=1 python3 '${base.replace(/'/g,"'\"'\"'")}'${args} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
+    ].join(" && ");
+    const created = await dockerRequest("POST", "/containers/ds_python/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] });
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
+    let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+    if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
+    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+    if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
+    const host = "127.0.0.1";
+    const rtsp = `rtsp://${host}:8554/ds-test`;
+    res.json({ status: "ok", artifact_path: p, bytes, rtsp });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.post("/api/dspython/start_example", async (req, res) => {
   try {
     const image = (req.body && req.body.image) || DS_APP_IMAGE;

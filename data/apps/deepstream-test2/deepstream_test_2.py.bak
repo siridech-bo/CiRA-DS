@@ -217,7 +217,6 @@ def main(args):
     if not sgie1:
         sys.stderr.write(" Unable to make sgie1 \n")
 
-
     sgie2 = Gst.ElementFactory.make("nvinfer", "secondary2-nvinference-engine")
     if not sgie2:
         sys.stderr.write(" Unable to make sgie2 \n")
@@ -282,21 +281,6 @@ def main(args):
             tracker_ll_config_file = config.get('tracker', key)
             tracker.set_property('ll-config-file', tracker_ll_config_file)
 
-    tee = Gst.ElementFactory.make("tee", "tee")
-    queue_render = Gst.ElementFactory.make("queue", "queue_render")
-    queue_encode = Gst.ElementFactory.make("queue", "queue_encode")
-    enc_conv = Gst.ElementFactory.make("nvvideoconvert", "enc_conv")
-    encoder = Gst.ElementFactory.make("nvv4l2h264enc", "encoder")
-    h264parse_out = Gst.ElementFactory.make("h264parse", "h264parse_out")
-    pay = Gst.ElementFactory.make("rtph264pay", "pay0")
-    rtsp = Gst.ElementFactory.make("rtspclientsink", "rtsp_out")
-    if not (tee and queue_render and queue_encode and enc_conv and encoder and h264parse_out and pay and rtsp):
-        sys.stderr.write(" Unable to create RTSP branch elements \n")
-    encoder.set_property('bitrate', 4000000)
-    encoder.set_property('insert-sps-pps', True)
-    encoder.set_property('iframeinterval', 30)
-    pay.set_property('pt', 96)
-    rtsp.set_property('location', 'rtsp://127.0.0.1:8554/ds-test')
     print("Adding elements to Pipeline \n")
     pipeline.add(source)
     pipeline.add(h264parser)
@@ -308,14 +292,6 @@ def main(args):
     pipeline.add(sgie2)
     pipeline.add(nvvidconv)
     pipeline.add(nvosd)
-    pipeline.add(tee)
-    pipeline.add(queue_render)
-    pipeline.add(queue_encode)
-    pipeline.add(enc_conv)
-    pipeline.add(encoder)
-    pipeline.add(h264parse_out)
-    pipeline.add(pay)
-    pipeline.add(rtsp)
     pipeline.add(sink)
 
     # we link the elements together
@@ -338,23 +314,7 @@ def main(args):
     sgie1.link(sgie2)
     sgie2.link(nvvidconv)
     nvvidconv.link(nvosd)
-    nvosd.link(tee)
-    tee_render_pad = tee.request_pad_simple('src_%u')
-    tee_encode_pad = tee.request_pad_simple('src_%u')
-    if not tee_render_pad or not tee_encode_pad:
-        sys.stderr.write(" Unable to get request pads from tee \n")
-    queue_render_sink = queue_render.get_static_pad('sink')
-    queue_encode_sink = queue_encode.get_static_pad('sink')
-    if not queue_render_sink or not queue_encode_sink:
-        sys.stderr.write(" Unable to get queue sink pads \n")
-    tee_render_pad.link(queue_render_sink)
-    tee_encode_pad.link(queue_encode_sink)
-    queue_render.link(sink)
-    queue_encode.link(enc_conv)
-    enc_conv.link(encoder)
-    encoder.link(h264parse_out)
-    h264parse_out.link(pay)
-    pay.link(rtsp)
+    nvosd.link(sink)
 
 
     # create and event loop and feed gstreamer bus mesages to it
@@ -387,4 +347,3 @@ def main(args):
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
-
