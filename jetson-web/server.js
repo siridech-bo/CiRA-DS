@@ -690,37 +690,9 @@ if (!WebSocketServer) {
     WebSocketServer = wsMod.WebSocketServer || wsMod.Server || null;
   } catch {}
 }
-try {
-  nodePty = await import("node-pty");
-} catch {}
-if (!(WebSocketServer && nodePty && nodePty.spawn)) {
-  try {
-    const npmExe = process.platform === "win32" ? "npm.cmd" : "npm";
-    let okInstall = false;
-    let r = spawnSync(npmExe, ["install", "ws", "node-pty", "--no-save"], { cwd: __dirname, stdio: "inherit" });
-    okInstall = !!(r && r.status === 0);
-    if (!okInstall) {
-      const yarnExe = process.platform === "win32" ? "yarn.cmd" : "yarn";
-      r = spawnSync(yarnExe, ["add", "ws", "node-pty"], { cwd: __dirname, stdio: "inherit" });
-      okInstall = !!(r && r.status === 0);
-    }
-    if (okInstall) {
-      try {
-        const wsMod2 = await import("ws");
-        WebSocketServer = wsMod2.WebSocketServer || wsMod2.Server || null;
-      } catch {}
-      if (!WebSocketServer) {
-        try {
-          const req = createRequire(import.meta.url);
-          const wsMod2 = req("ws");
-          WebSocketServer = wsMod2.WebSocketServer || wsMod2.Server || null;
-        } catch {}
-      }
-      try {
-        nodePty = await import("node-pty");
-      } catch {}
-    }
-  } catch {}
+const TERM_PTY_ENABLED = String(process.env.TERM_PTY_ENABLED || "").toLowerCase() === "1";
+if (TERM_PTY_ENABLED) {
+  try { nodePty = await import("node-pty"); } catch {}
 }
 let TERM_MODE = "disabled";
 if (WebSocketServer && nodePty && nodePty.spawn) {
