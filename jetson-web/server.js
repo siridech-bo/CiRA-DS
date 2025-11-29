@@ -989,7 +989,12 @@ app.get("/api/mcp/tail_logs", async (req, res) => {
     if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
     const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
-    const text = Buffer.from(started.body || "", "binary").toString();
+    let text = Buffer.from(started.body || "", "binary").toString();
+    if (!text || /NO_LOG/.test(text) || !text.trim().length) {
+      const logs = await dockerRequest("GET", `/containers/ds_python/logs?stdout=1&stderr=1&tail=${tail}`);
+      const fallback = logs.body || "";
+      text = fallback || text;
+    }
     res.type("text/plain").send(text || "");
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });

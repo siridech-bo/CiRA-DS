@@ -74,7 +74,7 @@ server.registerTool(
     outputSchema: { text: z.string().optional() }
   },
   async ({ tail = 600 }) => {
-    const text = await get(`/api/mcp/tail_logs?tail=${tail}`);
+    const text = await get(`/api/dspython/logs?tail=${tail}`);
     const data = typeof text === "string" ? text : JSON.stringify(text);
     return { content: [{ type: "text", text: data }], structuredContent: { text: data } };
   }
