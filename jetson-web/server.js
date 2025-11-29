@@ -7,6 +7,9 @@ import fs from "fs";
 import os from "os";
 import { spawnSync, spawn } from "child_process";
 import { createRequire } from "module";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import * as z from "zod/v4";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1568,6 +1571,94 @@ app.get("/openapi.json", async (_req, res) => {
     const p = path.join(__dirname, "openapi.json");
     if (!fs.existsSync(p)) return res.status(404).json({ error: "spec_not_found" });
     res.type("application/json").send(fs.readFileSync(p, "utf8"));
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+const mcpServer = new McpServer({ name: "CiRA SPACE", version: "0.2.0" });
+
+mcpServer.registerTool(
+  "upload_file",
+  {
+    title: "Upload file",
+    description: "Atomic write to container under allowed root",
+    inputSchema: { path: z.string(), content: z.string(), sha256: z.string().optional(), mode: z.string().optional() },
+    outputSchema: { status: z.string().optional(), artifact_path: z.string().optional(), bytes: z.number().optional() }
+  },
+  async ({ path, content, sha256, mode }) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/upload_file`, { path, content, sha256, mode });
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "validate_python",
+  {
+    title: "Validate Python",
+    description: "py_compile a path in the container",
+    inputSchema: { path: z.string() },
+    outputSchema: { status: z.string().optional(), output: z.string().optional() }
+  },
+  async ({ path }) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/validate_python`, { path });
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "test_python",
+  {
+    title: "Test Python",
+    description: "Upload (optional), validate and run DeepStream app; return RTSP",
+    inputSchema: { path: z.string(), content: z.string().optional(), sha256: z.string().optional(), validate: z.boolean().optional(), input: z.string().optional(), codec: z.string().optional() },
+    outputSchema: { status: z.string().optional(), artifact_path: z.string().optional(), bytes: z.number().optional(), rtsp: z.string().optional() }
+  },
+  async (args) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/test_python`, args);
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "tail_logs",
+  {
+    title: "Tail logs",
+    description: "Fetch recent runtime lines",
+    inputSchema: { tail: z.number().optional() },
+    outputSchema: { text: z.string().optional() }
+  },
+  async ({ tail = 600 }) => {
+    const r = await axios.get(`http://127.0.0.1:${PORT}/api/mcp/tail_logs?tail=${tail}`);
+    const text = typeof r.data === "string" ? r.data : JSON.stringify(r.data);
+    return { content: [{ type: "text", text }], structuredContent: { text } };
+  }
+);
+
+mcpServer.registerTool(
+  "stop_python",
+  {
+    title: "Stop Python",
+    description: "Stop running app by filename",
+    inputSchema: { path: z.string() },
+    outputSchema: { status: z.string().optional() }
+  },
+  async ({ path }) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/stop_python`, { path });
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+app.post("/mcp", async (req, res) => {
+  try {
+    const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
+    res.on("close", () => { transport.close(); });
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res, req.body);
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }

@@ -1,0 +1,12 @@
+{
+  "name": "cira-space-mcp",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "cira-space-mcp-server.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.23.0",
+    "zod": "^3.23.8",
+    "axios": "^1.7.7"
+  }
+}
