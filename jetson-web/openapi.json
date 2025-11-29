@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "DeepStream Web API",
-    "version": "0.1.0"
+    "title": "CiRA SPACE MCP",
+    "version": "0.2.0"
   },
   "servers": [
     { "url": "http://localhost:5000" },
@@ -66,7 +66,36 @@
     "/api/stream/{id}": { "delete": { "summary": "Proxy delete stream", "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "OK" } } } },
     "/api/infer": { "put": { "summary": "Proxy infer update", "responses": { "200": { "description": "OK" } } } },
     "/api/roi": { "post": { "summary": "Proxy ROI", "responses": { "200": { "description": "OK" } } } },
-    "/api/health": { "get": { "summary": "Proxy health", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } } } }
+    "/api/health": { "get": { "summary": "Proxy health", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } } } },
+    "/api/mcp/upload_file": {
+      "post": {
+        "summary": "Upload file atomically to container (allowed root only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpUploadRequest" } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpUploadResponse" } } } }, "400": { "description": "Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/api/mcp/validate_python": {
+      "post": {
+        "summary": "Compile-check a Python file in container",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpPathRequest" } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" } } } } } }, "400": { "description": "Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/api/mcp/test_python": {
+      "post": {
+        "summary": "Upload (optional), validate, run DeepStream app and return RTSP URL",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpTestRequest" } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpTestResponse" } } } }, "400": { "description": "Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/api/mcp/stop_python": {
+      "post": {
+        "summary": "Stop running Python app by filename",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/McpPathRequest" } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } }
+      }
+    },
+    "/api/mcp/tail_logs": { "get": { "summary": "Tail DeepStream Python logs", "parameters": [ { "name": "tail", "in": "query", "schema": { "type": "integer", "default": 600 } } ], "responses": { "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } } } } }
   },
   "components": {
     "schemas": {
@@ -81,7 +110,12 @@
       "HlsStartRequest": { "type": "object", "properties": { "uri": { "type": "string" }, "hls_time": { "type": "integer" }, "hls_list_size": { "type": "integer" } }, "required": ["uri"] },
       "HlsStartResponse": { "type": "object", "properties": { "ok": { "type": "boolean" }, "pipeline": { "type": "string" }, "playlist": { "type": "string" } } },
       "ConfigSaveRequest": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } }, "required": ["path","content"] },
-      "SnapshotStartRequest": { "type": "object", "properties": { "uri": { "type": "string" }, "rate": { "type": "integer" } }, "required": ["uri"] }
+      "SnapshotStartRequest": { "type": "object", "properties": { "uri": { "type": "string" }, "rate": { "type": "integer" } }, "required": ["uri"] },
+      "McpPathRequest": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] },
+      "McpUploadRequest": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "sha256": { "type": "string" }, "mode": { "type": "string" } }, "required": ["path","content"] },
+      "McpUploadResponse": { "type": "object", "properties": { "status": { "type": "string" }, "bytes": { "type": "integer" }, "path": { "type": "string" } } },
+      "McpTestRequest": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "sha256": { "type": "string" }, "validate": { "type": "boolean" }, "input": { "type": "string" }, "codec": { "type": "string" } }, "required": ["path"] },
+      "McpTestResponse": { "type": "object", "properties": { "status": { "type": "string" }, "artifact_path": { "type": "string" }, "bytes": { "type": "integer" }, "rtsp": { "type": "string" } } }
     }
   }
 }

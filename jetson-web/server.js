@@ -1563,3 +1563,12 @@ app.get("/api/mediamtx/read_host", async (_req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.get("/openapi.json", async (_req, res) => {
+  try {
+    const p = path.join(__dirname, "openapi.json");
+    if (!fs.existsSync(p)) return res.status(404).json({ error: "spec_not_found" });
+    res.type("application/json").send(fs.readFileSync(p, "utf8"));
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
