@@ -2,7 +2,7 @@ import express from "express";
 import axios from "axios";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import * as z from "zod/v4";
+import * as z from "zod";
 
 const app = express();
 app.use(express.json());
