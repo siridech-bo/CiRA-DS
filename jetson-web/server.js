@@ -234,6 +234,7 @@ app.post("/api/hls/start", async (req, res) => {
   const hlsTime = Number((req.body && req.body.hls_time) || 2);
   const hlsListSize = Number((req.body && req.body.hls_list_size) || 5);
   const target = "/app/public/video/out.m3u8";
+  const hostTarget = "/data/hls/out.m3u8";
   if (!uri) return res.status(400).json({ error: "uri required" });
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
@@ -260,7 +261,7 @@ app.post("/api/hls/start", async (req, res) => {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
         await new Promise(r => setTimeout(r, 15000));
-        await fs.promises.access(target, fs.constants.R_OK);
+        await fs.promises.access(hostTarget, fs.constants.R_OK);
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
         try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
@@ -288,7 +289,7 @@ app.post("/api/hls/start", async (req, res) => {
         ok = true; used = c;
         try {
           await new Promise(r => setTimeout(r, 15000));
-          await fs.promises.access(target, fs.constants.R_OK);
+          await fs.promises.access(hostTarget, fs.constants.R_OK);
           break;
         } catch {
           try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
@@ -316,7 +317,7 @@ app.post("/api/hls/start", async (req, res) => {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
         await new Promise(r => setTimeout(r, 15000));
-        await fs.promises.access(target, fs.constants.R_OK);
+        await fs.promises.access(hostTarget, fs.constants.R_OK);
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
         try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
