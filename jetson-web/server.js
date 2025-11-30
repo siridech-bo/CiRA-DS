@@ -245,7 +245,7 @@ app.post("/api/hls/start", async (req, res) => {
   const baseSink = `hlssink max-files=${Math.max(1,hlsListSize)} target-duration=${Math.max(1,hlsTime)} playlist-location=${target} location=/app/public/video/out_%05d.ts`;
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let ok = false, used = "";
-  const ffimg = "lscr.io/linuxserver/ffmpeg:latest";
+  const ffimg = String((req.body && req.body.image) || "lscr.io/linuxserver/ffmpeg:latest");
   const ffCmd = isRtsp
     ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
     : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
@@ -317,7 +317,7 @@ app.post("/api/hls/start", async (req, res) => {
     }
   }
   if (!ok) {
-    const ffimg = "jrottenberg/ffmpeg:4.4-alpine";
+    const ffimg = String((req.body && req.body.image) || "jrottenberg/ffmpeg:4.4-alpine");
     const ffCmd = isRtsp
       ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
       : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
@@ -1682,6 +1682,51 @@ mcpServer.registerTool(
     const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/stop_python`, { path });
     const data = r.data;
     return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "hls_start",
+  {
+    title: "Start HLS",
+    description: "Start ffmpeg HLS sidecar",
+    inputSchema: { uri: z.string(), hls_time: z.number().optional(), hls_list_size: z.number().optional(), image: z.string().optional() },
+    outputSchema: { ok: z.boolean().optional(), playlist: z.string().optional(), pipeline: z.string().optional(), error: z.string().optional() }
+  },
+  async ({ uri, hls_time, hls_list_size, image }) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/hls/start`, { uri, hls_time, hls_list_size, image });
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "hls_stop",
+  {
+    title: "Stop HLS",
+    description: "Stop ffmpeg HLS sidecar",
+    inputSchema: {},
+    outputSchema: { ok: z.boolean().optional() }
+  },
+  async () => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/hls/stop`);
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "hls_logs",
+  {
+    title: "HLS logs",
+    description: "Tail HLS sidecar logs",
+    inputSchema: {},
+    outputSchema: { text: z.string().optional() }
+  },
+  async () => {
+    const r = await axios.get(`http://127.0.0.1:${PORT}/api/hls/logs`);
+    const text = typeof r.data === "string" ? r.data : JSON.stringify(r.data);
+    return { content: [{ type: "text", text }], structuredContent: { text } };
   }
 );
 
