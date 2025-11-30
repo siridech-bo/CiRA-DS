@@ -1252,7 +1252,11 @@ app.post("/api/dspython/start_example", async (req, res) => {
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
-      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+      "NVDS_PATH=/opt/nvidia/deepstream/deepstream-6.0",
+      "GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
+      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
       "PYTHONPATH=/workspace",
       "PYTHONUNBUFFERED=1"
     ];

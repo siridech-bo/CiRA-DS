@@ -10,7 +10,10 @@ gi.require_version('GstRtspServer', '1.0')
 from gi.repository import GLib, Gst, GstRtspServer
 import platform
 from common.bus_call import bus_call
-import pyds
+try:
+    import pyds
+except Exception:
+    import pyds_ext as pyds
 import cv2
 
 PGIE_CLASS_ID_VEHICLE = 0
