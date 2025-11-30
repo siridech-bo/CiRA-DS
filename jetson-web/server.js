@@ -595,7 +595,8 @@ app.post("/api/debug/run", async (req, res) => {
       "/data/ds/configs:/data/ds/configs",
       "/data/weight_config:/data/weight_config",
       "/app/configs:/host_app_configs",
-      "/data/hls:/app/public/video"
+      "/data/hls:/app/public/video",
+      "/data/ds/share:/app/share"
     ];
     const env = [
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
@@ -605,7 +606,8 @@ app.post("/api/debug/run", async (req, res) => {
       "GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
       "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
       "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
-      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+      "PYTHONPATH=/app/share"
     ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
     const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
@@ -1246,7 +1248,8 @@ app.post("/api/dspython/start_example", async (req, res) => {
       "/app/configs:/host_app_configs",
       "/data/hls:/app/public/video",
       "/data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps",
-      "/data/ds/apps/pyds_ext:/workspace/pyds_ext"
+      "/data/ds/apps/pyds_ext:/workspace/pyds_ext",
+      "/data/ds/share:/app/share"
     ];
     const env = [
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
@@ -1257,7 +1260,7 @@ app.post("/api/dspython/start_example", async (req, res) => {
       "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
       "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
       "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
-      "PYTHONPATH=/workspace",
+      "PYTHONPATH=/workspace:/app/share",
       "PYTHONUNBUFFERED=1"
     ];
     const cmd = [
@@ -1288,11 +1291,12 @@ app.post("/api/dspython/run_example", async (req, res) => {
     if (!running) return res.status(400).json({ error: "ds_python not running" });
     const cmd = [
       "DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)",
-      "cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out",
+      "TARGET=/app/share/deepstream_test1_rtsp_out_1.py",
+      "if [ -f \"$TARGET\" ]; then cd /app/share; else cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out; fi",
       "pkill -f deepstream_test1_rtsp_out_1.py || true",
       "mkdir -p /data/ds/configs",
       ": > /data/ds/configs/ds_py_rtsp_out.txt",
-      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out_1.py -i ${input} -c ${codec} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
+      `nohup env PYTHONUNBUFFERED=1 PYTHONPATH=/app/share:$PYTHONPATH python3 deepstream_test1_rtsp_out_1.py -i ${input} -c ${codec} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
     ].join(" && ");
     const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
@@ -1307,6 +1311,32 @@ app.post("/api/dspython/run_example", async (req, res) => {
     const udp = "udp://127.0.0.1:5600";
     const hls = "/video/out.m3u8";
     res.json({ status: "ok", udp, hls });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+const SHARE_ROOT = "/data/ds/share";
+app.post("/api/mcp/upload_host", async (req, res) => {
+  try {
+    const p = String((req.body && req.body.path) || "").trim();
+    const content = (req.body && req.body.content);
+    const sha256 = String((req.body && req.body.sha256) || "").trim();
+    const mode = String((req.body && req.body.mode) || "").trim();
+    if (!p || !p.startsWith(SHARE_ROOT) || p.includes("..")) return res.status(400).json({ error: "invalid path", allowed_root: SHARE_ROOT });
+    if (content === undefined || content === null) return res.status(400).json({ error: "content required" });
+    const dir = path.dirname(p);
+    await fs.promises.mkdir(dir, { recursive: true });
+    const data = Buffer.from(String(content), "utf8");
+    if (sha256) {
+      const got = crypto.createHash("sha256").update(data).digest("hex");
+      if (got.toLowerCase() !== sha256.toLowerCase()) return res.status(400).json({ status: "error", error: "sha256 mismatch", expected: sha256, got });
+    }
+    const tmp = path.join(dir, `.upload_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+    await fs.promises.writeFile(tmp, data);
+    await fs.promises.rename(tmp, p).catch(async () => { try { await fs.promises.copyFile(tmp, p); await fs.promises.unlink(tmp); } catch {} });
+    if (mode) { try { await fs.promises.chmod(p, parseInt(mode.replace(/[^0-7]/g, ""), 8)); } catch {} }
+    res.json({ status: "ok", artifact_path: p, bytes: data.length });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
