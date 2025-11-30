@@ -30,5 +30,6 @@ services:
       - /data/ds/configs:/app/configs
       - /data/ds/configs:/data/ds/configs
       - /data/snapshots:/data/snapshots
+      - /data/ds/share:/data/ds/share
       - /opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl:/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl
       - ./jetson-web/server.js:/app/server.js:ro
