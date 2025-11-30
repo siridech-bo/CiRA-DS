@@ -249,6 +249,19 @@ app.post("/api/hls/start", async (req, res) => {
   const ffCmd = isRtsp
     ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
     : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
+  if (isUdp) {
+    try {
+      const cmd = `nohup gst-launch-1.0 -vv udpsrc uri='${uri}' ! tsdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink} &`;
+      const created = await dockerRequest("POST", "/containers/ds_python/exec", { AttachStdout: true, AttachStderr: true, Cmd: ["bash","-lc", cmd] });
+      const id = JSON.parse(created.body || "{}").Id || "";
+      if (id) {
+        await dockerRequest("POST", `/exec/${id}/start`, { Detach: true, Tty: false });
+        await new Promise(r => setTimeout(r, 15000));
+        await fs.promises.access(hostTarget, fs.constants.R_OK);
+        ok = true; used = cmd;
+      }
+    } catch {}
+  }
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
   if (!(created.statusCode >= 200 && created.statusCode < 300)) {
@@ -275,6 +288,9 @@ app.post("/api/hls/start", async (req, res) => {
     if (isRtsp) {
       cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=500 ! rtph264depay ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
       cmds.push(`gst-launch-1.0 -vv rtspsrc location='${uri}' latency=500 ! rtph265depay ! h265parse ! mpegtsmux ! ${baseSink}`);
+    } else if (isUdp) {
+      cmds.push(`gst-launch-1.0 -vv udpsrc uri='${uri}' ! tsdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
+      cmds.push(`gst-launch-1.0 -vv udpsrc uri='${uri}' ! tsdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
     } else {
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! qtdemux ! h265parse ! mpegtsmux ! ${baseSink}`);
