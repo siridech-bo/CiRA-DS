@@ -38,7 +38,7 @@ if (JETSON_ONLY && !(isJetsonHost() || IS_JETSON)) {
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";
 let messages = [];
 
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 
