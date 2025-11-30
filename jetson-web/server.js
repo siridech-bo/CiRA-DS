@@ -238,8 +238,9 @@ app.post("/api/hls/start", async (req, res) => {
   if (!uri) return res.status(400).json({ error: "uri required" });
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
+  const isUdp = uri.startsWith("udp://");
   const binds = ["/data/hls:/app/public/video"];
-  if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {}
+  if (!isRtsp && !isUdp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {}
   }
   const baseSink = `hlssink max-files=${Math.max(1,hlsListSize)} target-duration=${Math.max(1,hlsTime)} playlist-location=${target} location=/app/public/video/out_%05d.ts`;
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
