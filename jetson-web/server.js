@@ -41,6 +41,7 @@ let messages = [];
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/video", express.static("/data/hls"));
 
 
 app.post("/api/stream", async (req, res) => {
