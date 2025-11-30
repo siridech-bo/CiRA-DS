@@ -601,7 +601,11 @@ app.post("/api/debug/run", async (req, res) => {
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
-      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+      "NVDS_PATH=/opt/nvidia/deepstream/deepstream-6.0",
+      "GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
+      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
     ];
     await dockerRequest("DELETE", "/containers/ds_debug?force=true");
     const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
@@ -907,6 +911,7 @@ app.get("/api/dsapp/samples", (_req, res) => {
       const image = (req.body && req.body.image) || DS_IMAGE;
       const parts = [];
       parts.push("DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)");
+      parts.push("[ -f \"$DS_ROOT/setup-env.sh\" ] && source \"$DS_ROOT/setup-env.sh\" || true");
       if (shouldInstall) {
         parts.push("apt-get update");
         parts.push("DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-gi gir1.2-gstreamer-1.0 libgirepository1.0-dev gstreamer1.0-plugins-base gstreamer1.0-tools libglib2.0-dev python3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev build-essential pkg-config cmake libtool autoconf automake m4" + (useGit ? " git" : ""));
@@ -942,7 +947,11 @@ app.get("/api/dsapp/samples", (_req, res) => {
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
       "PLATFORM_TEGRA=1",
-      "LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+      "NVDS_PATH=/opt/nvidia/deepstream/deepstream-6.0",
+      "GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+      "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
+      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
     ];
     await dockerRequest("DELETE", "/containers/ds_python?force=true");
     const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
