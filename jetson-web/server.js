@@ -945,7 +945,8 @@ app.get("/api/dsapp/samples", (_req, res) => {
       "/data/ds/configs:/data/ds/configs",
       "/data/weight_config:/data/weight_config",
       "/app/configs:/host_app_configs",
-      "/data/hls:/app/public/video"
+      "/data/hls:/app/public/video",
+      "/data/ds/share:/app/share"
     ];
     const env = [
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
@@ -955,7 +956,9 @@ app.get("/api/dsapp/samples", (_req, res) => {
       "GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
       "GST_PLUGIN_SYSTEM_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/gst-plugins:/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
       "GI_TYPELIB_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib/girepository-1.0",
-      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf"
+      "LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream-6.0/lib:/usr/local/cuda-10.2/lib64:/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
+      "PYTHONPATH=/workspace:/app/share",
+      "PYTHONUNBUFFERED=1"
     ];
     await dockerRequest("DELETE", "/containers/ds_python?force=true");
     const body = { Image: image, Entrypoint: ["bash"], Cmd: ["-lc", cmd], Env: env, HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
@@ -1321,22 +1324,29 @@ app.post("/api/mcp/upload_host", async (req, res) => {
   try {
     const p = String((req.body && req.body.path) || "").trim();
     const content = (req.body && req.body.content);
+    const contentB64 = (req.body && req.body.content_b64);
     const sha256 = String((req.body && req.body.sha256) || "").trim();
     const mode = String((req.body && req.body.mode) || "").trim();
-    if (!p || !p.startsWith(SHARE_ROOT) || p.includes("..")) return res.status(400).json({ error: "invalid path", allowed_root: SHARE_ROOT });
-    if (content === undefined || content === null) return res.status(400).json({ error: "content required" });
-    const dir = path.dirname(p);
+    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: SHARE_ROOT });
+    const n = path.normalize(p);
+    if (!path.isAbsolute(n)) return res.status(400).json({ error: "invalid path", allowed_root: SHARE_ROOT });
+    const rel = path.relative(SHARE_ROOT, n);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return res.status(400).json({ error: "invalid path", allowed_root: SHARE_ROOT });
+    if (content === undefined && contentB64 === undefined) return res.status(400).json({ error: "content required" });
+    const dir = path.dirname(n);
     await fs.promises.mkdir(dir, { recursive: true });
-    const data = Buffer.from(String(content), "utf8");
+    const data = (contentB64 !== undefined && contentB64 !== null)
+      ? Buffer.from(String(contentB64), "base64")
+      : Buffer.from(String(content), "utf8");
     if (sha256) {
       const got = crypto.createHash("sha256").update(data).digest("hex");
       if (got.toLowerCase() !== sha256.toLowerCase()) return res.status(400).json({ status: "error", error: "sha256 mismatch", expected: sha256, got });
     }
     const tmp = path.join(dir, `.upload_${Date.now()}_${Math.random().toString(16).slice(2)}`);
     await fs.promises.writeFile(tmp, data);
-    await fs.promises.rename(tmp, p).catch(async () => { try { await fs.promises.copyFile(tmp, p); await fs.promises.unlink(tmp); } catch {} });
-    if (mode) { try { await fs.promises.chmod(p, parseInt(mode.replace(/[^0-7]/g, ""), 8)); } catch {} }
-    res.json({ status: "ok", artifact_path: p, bytes: data.length });
+    await fs.promises.rename(tmp, n).catch(async () => { try { await fs.promises.copyFile(tmp, n); await fs.promises.unlink(tmp); } catch {} });
+    if (mode) { try { await fs.promises.chmod(n, parseInt(mode.replace(/[^0-7]/g, ""), 8)); } catch {} }
+    res.json({ status: "ok", artifact_path: n, bytes: data.length });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
