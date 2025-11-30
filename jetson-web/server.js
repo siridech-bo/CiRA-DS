@@ -10,6 +10,7 @@ import { createRequire } from "module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import * as z from "zod/v4";
+import crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -907,6 +908,7 @@ app.post("/api/dspython/exec", async (req, res) => {
 });
 
 const MCP_ALLOWED_ROOT = "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/";
+const HOST_DS_APPS_ROOT = "/data/ds/apps/deepstream_python_apps/apps/";
 function _normalizeContainerPath(p) {
   try {
     const s = String(p || "").trim();
@@ -915,6 +917,40 @@ function _normalizeContainerPath(p) {
     return s;
   } catch { return null; }
 }
+
+app.put("/api/mcp/upload_raw", async (req, res) => {
+  try {
+    const qp = (req.query && req.query.path) || "";
+    const p = _normalizeContainerPath(String(qp || ""));
+    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    const hostPath = p.replace(MCP_ALLOWED_ROOT, HOST_DS_APPS_ROOT);
+    const dir = path.dirname(hostPath);
+    await fs.promises.mkdir(dir, { recursive: true });
+    const tmp = path.join(dir, `.upload_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+    const hasSha = typeof req.headers["x-sha256"] === "string" && String(req.headers["x-sha256"]).trim().length > 0;
+    const shaExpect = hasSha ? String(req.headers["x-sha256"]).trim() : "";
+    const modeHdr = String(req.headers["x-mode"] || "").trim();
+    const hash = crypto.createHash("sha256");
+    let bytes = 0;
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(tmp);
+      req.on("data", (chunk) => { try { bytes += chunk.length; hash.update(chunk); } catch {} });
+      req.on("error", reject);
+      out.on("error", reject);
+      out.on("finish", resolve);
+      req.pipe(out);
+    });
+    await fs.promises.rename(tmp, hostPath).catch(async () => { try { await fs.promises.copyFile(tmp, hostPath); await fs.promises.unlink(tmp); } catch {} });
+    if (modeHdr) { try { await fs.promises.chmod(hostPath, parseInt(modeHdr.replace(/[^0-7]/g, ""), 8)); } catch {} }
+    if (hasSha) {
+      const digest = hash.digest("hex");
+      if (digest.toLowerCase() !== shaExpect.toLowerCase()) return res.status(400).json({ status: "error", error: "sha256 mismatch", expected: shaExpect, got: digest, bytes });
+    } else { hash.digest(); }
+    res.json({ status: "ok", artifact_path: p, bytes });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
 
 app.post("/api/mcp/upload_file", async (req, res) => {
   try {
