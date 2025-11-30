@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import * as z from "zod";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 
 const PORT = process.env.PORT || 3001;
 const BASE = process.env.JETSON_WEB_BASE || "http://127.0.0.1:3000";

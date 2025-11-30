@@ -58,3 +58,21 @@
   - `/data/hls` → `/app/public/video` (HLS serving)
   - `/data/videos` → `/app/public/media` (File playback)
   - `/data/ds/configs` → `/app/configs` (INI editing)
+
+## 2025-11-29 Updates
+- Terminal fix: removed `node-pty` and default to stdio mode to avoid native module error (`jetson-web/package.json:14`, `jetson-web/server.js:693–767`).
+- Logs panel: UI polls both container logs and `ds_py_rtsp_out.txt` for real-time updates (`jetson-web/public/index.html:219–227`, `jetson-web/public/index.html:329–332`).
+- MCP Gateway usage: proxy tools to Jetson web app
+  - Health: `GET http://<gateway-ip>:3001/health` shows `base` pointing to Jetson (`mcp-gateway/server.js:97–99`)
+  - Tools endpoint: `POST http://<gateway-ip>:3001/mcp` (Streamable HTTP JSON-RPC)
+  - Available tools: upload_file, validate_python, test_python, tail_logs, stop_python (`mcp-gateway/server.js:26–95`)
+- Jetson run via web app
+  - Start DS Python example: `POST /api/dspython/start_example` (`jetson-web/server.js:1086–1123`)
+  - Run RTSP-out sample: `POST /api/dspython/run_example` returns RTSP URL (`jetson-web/server.js:1125–1154`)
+  - Tail runtime logs: `GET /api/mcp/tail_logs?tail=200` (`jetson-web/server.js:951–974`)
+
+### Quick MCP + Web App Test (Jetson)
+- Start container: `POST http://<jetson-ip>:3000/api/dspython/start_example`
+- Run RTSP-out: `POST http://<jetson-ip>:3000/api/dspython/run_example` → `rtsp://127.0.0.1:8554/ds-test`
+- Tail logs: `GET http://<jetson-ip>:3000/api/mcp/tail_logs?tail=200`
+- MCP tools (if needed): `POST http://<gateway-ip>:3001/mcp` with JSON-RPC `tools/call` for `test_python` or `tail_logs`
