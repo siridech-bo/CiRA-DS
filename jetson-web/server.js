@@ -905,7 +905,9 @@ app.get("/api/dsapp/samples", (_req, res) => {
 
   app.post("/api/dspython/start", async (req, res) => {
     try {
-      if (devBlocked()) return res.status(403).json({ error: "blocked_on_dev" });
+      const forceParam = String(((req.query && req.query.force) || (req.body && req.body.force) || (req.headers && req.headers["x-allow-dev"]) || "")).trim();
+      const allowOverride = forceParam === "1" || forceParam.toLowerCase() === "true";
+      if (devBlocked() && !allowOverride) return res.status(403).json({ error: "blocked_on_dev" });
       const shouldInstall = !!(req.body && req.body.install);
       const useGit = !!(req.body && req.body.useGit);
       const image = (req.body && req.body.image) || DS_IMAGE;
@@ -1283,10 +1285,10 @@ app.post("/api/dspython/run_example", async (req, res) => {
     const cmd = [
       "DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)",
       "cd $DS_ROOT/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out",
-      "pkill -f deepstream_test1_rtsp_out.py || true",
+      "pkill -f deepstream_test1_rtsp_out_1.py || true",
       "mkdir -p /data/ds/configs",
       ": > /data/ds/configs/ds_py_rtsp_out.txt",
-      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out.py -i ${input} -c ${codec} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
+      `nohup env PYTHONUNBUFFERED=1 python3 deepstream_test1_rtsp_out_1.py -i ${input} -c ${codec} 2>&1 | tee -a /data/ds/configs/ds_py_rtsp_out.txt & echo STARTED=$!`
     ].join(" && ");
     const createBody = { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] };
     const created = await dockerRequest("POST", "/containers/ds_python/exec", createBody);
@@ -1295,9 +1297,12 @@ app.post("/api/dspython/run_example", async (req, res) => {
     if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
     const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
     if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
-    const host = "127.0.0.1";
-    const rtsp = `rtsp://${host}:8554/ds-test`;
-    res.json({ status: "ok", rtsp });
+    try {
+      await axios.post(`http://127.0.0.1:${PORT}/api/hls/start`, { uri: "udp://127.0.0.1:5600", hls_time: Number((req.body && req.body.hls_time) || 2), hls_list_size: Number((req.body && req.body.hls_list_size) || 5), image: (req.body && req.body.image) || undefined });
+    } catch {}
+    const udp = "udp://127.0.0.1:5600";
+    const hls = "/video/out.m3u8";
+    res.json({ status: "ok", udp, hls });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
