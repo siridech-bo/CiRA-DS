@@ -21,18 +21,19 @@
    - Status: finished
 3. Build OpenCV → GStreamer → DeepStream pipeline
    - Status: finished
-4. Add HLS output (via ffmpeg bridge or hlssink) writing to `/data/hls/out.m3u8`; ensure web Output tab loads `/video/out.m3u8`
+4. Add HLS output using GStreamer `hlssink` on Jetson; avoid ffmpeg unless an ARM64 image is provided; write to `/data/hls/out.m3u8`; ensure web Output tab loads `/video/out.m3u8`
    - Status: finished
 5. Add start/stop control integration: run until explicit stop via MCP (`/api/dspython/stop`) or stop flag in `/data/ds/configs`
    - Status: finished
 6. Write runtime logs to `/data/ds/configs/ds_py_rtsp_out.txt`; add health checks
    - Status: finished
 7. Upload, validate, start via MCP; verify Output tab plays continuously; stop and cleanly tear down
-   - Status: finished (re-run with new ffmpeg sidecar)
+   - Status: finished (GStreamer path)
 
 ## Control and Verification
 - Start script: `POST /api/mcp/test_python` with path `.../deepstream_test1_rtsp_out_1.py` and input `'/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264'`
-- Start HLS: `POST /api/hls/start` with `uri='udp://127.0.0.1:5600'` or internal appsrc path used by pipeline; Output tab reads `/video/out.m3u8`
+- Start HLS: `POST /api/hls/start` with `uri='udp://127.0.0.1:5600'` (GStreamer hlssink). For RTSP-out, use `uri='rtsp://<host>:8554/ds-test'`.
+- Output tab reads `/video/out.m3u8`
 - Stop script: `POST /api/dspython/stop`
 - Stop HLS: `POST /api/hls/stop`
 - Logs: tail `/data/ds/configs/ds_py_rtsp_out.txt`

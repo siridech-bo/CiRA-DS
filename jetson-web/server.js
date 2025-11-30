@@ -1028,14 +1028,35 @@ app.post("/api/dspython/exec", async (req, res) => {
   }
 });
 
-const MCP_ALLOWED_ROOT = "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/";
-const HOST_DS_APPS_ROOT = "/data/ds/apps/deepstream_python_apps/apps/";
+const MCP_ALLOWED_ROOTS = [
+  "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/",
+  "/app/share/",
+];
+const HOST_PATH_MAP = {
+  "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/": "/data/ds/apps/deepstream_python_apps/apps/",
+  "/app/share/": "/data/ds/share/",
+};
 function _normalizeContainerPath(p) {
   try {
     const s = String(p || "").trim();
-    if (!s || !s.startsWith(MCP_ALLOWED_ROOT)) return null;
-    if (s.includes("..")) return null;
-    return s;
+    if (!s || s.includes("..")) return null;
+    for (const root of MCP_ALLOWED_ROOTS) {
+      if (s.startsWith(root)) return s;
+    }
+    return null;
+  } catch { return null; }
+}
+function _mapHostPath(containerPath) {
+  try {
+    const s = String(containerPath || "").trim();
+    for (const root of MCP_ALLOWED_ROOTS) {
+      if (s.startsWith(root)) {
+        const hostRoot = HOST_PATH_MAP[root];
+        if (!hostRoot) return null;
+        return s.replace(root, hostRoot);
+      }
+    }
+    return null;
   } catch { return null; }
 }
 
@@ -1043,8 +1064,9 @@ app.put("/api/mcp/upload_raw", async (req, res) => {
   try {
     const qp = (req.query && req.query.path) || "";
     const p = _normalizeContainerPath(String(qp || ""));
-    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
-    const hostPath = p.replace(MCP_ALLOWED_ROOT, HOST_DS_APPS_ROOT);
+    if (!p) return res.status(400).json({ error: "invalid path" });
+    const hostPath = _mapHostPath(p);
+    if (!hostPath) return res.status(400).json({ error: "invalid path" });
     const dir = path.dirname(hostPath);
     await fs.promises.mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `.upload_${Date.now()}_${Math.random().toString(16).slice(2)}`);
@@ -1079,7 +1101,7 @@ app.post("/api/mcp/upload_file", async (req, res) => {
     let content = (req.body && req.body.content);
     const sha256 = String((req.body && req.body.sha256) || "").trim();
     const mode = String((req.body && req.body.mode) || "").trim();
-    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    if (!p) return res.status(400).json({ error: "invalid path" });
     if (content === undefined || content === null) return res.status(400).json({ error: "content required" });
     const info = await dockerRequest("GET", "/containers/ds_python/json");
     let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
@@ -1133,7 +1155,7 @@ app.get("/api/mcp/tail_logs", async (req, res) => {
 app.post("/api/mcp/validate_python", async (req, res) => {
   try {
     const p = _normalizeContainerPath((req.body && req.body.path) || "");
-    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    if (!p) return res.status(400).json({ error: "invalid path" });
     const info = await dockerRequest("GET", "/containers/ds_python/json");
     let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
     if (!running) return res.status(400).json({ error: "ds_python not running" });
@@ -1161,7 +1183,7 @@ app.post("/api/mcp/test_python", async (req, res) => {
     const validate = !!(req.body && req.body.validate !== false);
     const input = String((req.body && req.body.input) || "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264");
     const codec = String((req.body && req.body.codec) || "H264");
-    if (!p) return res.status(400).json({ error: "invalid path", allowed_root: MCP_ALLOWED_ROOT });
+    if (!p) return res.status(400).json({ error: "invalid path" });
     const info = await dockerRequest("GET", "/containers/ds_python/json");
     let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
     if (!running) return res.status(400).json({ error: "ds_python not running" });
@@ -1195,7 +1217,7 @@ app.post("/api/mcp/test_python", async (req, res) => {
     const dir = p.replace(/\/[^/]+$/, "");
     const base = p.split("/").pop();
     let args = "";
-    if (/deepstream_test1_rtsp_out\.py$/.test(base)) args = ` -i ${input} -c ${codec}`;
+    if (/deepstream_test1_rtsp_out(_1)?\.py$/.test(base)) args = ` -i ${input} -c ${codec}`;
     else if (/deepstream_test_2\.py$/.test(base)) args = ` ${input}`;
     const cmd = [
       `cd '${dir.replace(/'/g,"'\"'\"'")}'`,

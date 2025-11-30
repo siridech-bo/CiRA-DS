@@ -9,12 +9,38 @@ gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
 from gi.repository import GLib, Gst, GstRtspServer
 import platform
-from common.bus_call import bus_call
+def bus_call(bus, message, loop):
+    t = message.type
+    if t == Gst.MessageType.EOS:
+        try:
+            print("EOS")
+        except Exception:
+            pass
+        try:
+            loop.quit()
+        except Exception:
+            pass
+        return True
+    elif t == Gst.MessageType.ERROR:
+        try:
+            err, dbg = message.parse_error()
+        except Exception:
+            err = None
+            dbg = None
+        try:
+            print("ERROR", err, dbg)
+        except Exception:
+            pass
+        try:
+            loop.quit()
+        except Exception:
+            pass
+        return True
+    return True
 try:
     import pyds
 except Exception:
     import pyds_ext as pyds
-import cv2
 
 PGIE_CLASS_ID_VEHICLE = 0
 PGIE_CLASS_ID_BICYCLE = 1
@@ -95,13 +121,23 @@ def build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hin
     if platform_is_integrated and enc_type == 0:
         encoder.set_property('preset-level', 1)
         encoder.set_property('insert-sps-pps', 1)
-    parse_out = Gst.ElementFactory.make("h264parse", "h264-parser-out")
+    parse_out = Gst.ElementFactory.make("h264parse" if codec=="H264" else "h265parse", "parser-out")
+    try:
+        parse_out.set_property('config-interval', -1)
+    except Exception:
+        pass
     mux = Gst.ElementFactory.make("mpegtsmux", "ts-mux")
-    sink = Gst.ElementFactory.make("udpsink", "udpsink")
-    sink.set_property('host', '127.0.0.1')
-    sink.set_property('port', 5600)
-    sink.set_property('async', False)
-    sink.set_property('sync', False)
+    q1 = Gst.ElementFactory.make("queue", "q1")
+    q2 = Gst.ElementFactory.make("queue", "q2")
+    sink = Gst.ElementFactory.make("hlssink", "hls-sink")
+    try:
+        sink.set_property('playlist-location', '/app/public/video/out.m3u8')
+        sink.set_property('location', '/app/public/video/out_%05d.ts')
+        sink.set_property('max-files', int(hls_list_size))
+        sink.set_property('target-duration', int(hls_time))
+        sink.set_property('playlist-length', int(hls_list_size))
+    except Exception:
+        pass
     source.set_property('location', stream_path)
     streammux.set_property('width', int(width_hint or 1920))
     streammux.set_property('height', int(height_hint or 1080))
@@ -119,7 +155,9 @@ def build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hin
     pipeline.add(caps)
     pipeline.add(encoder)
     pipeline.add(parse_out)
+    pipeline.add(q1)
     pipeline.add(mux)
+    pipeline.add(q2)
     pipeline.add(sink)
     source.link(h264parser)
     h264parser.link(decoder)
@@ -133,33 +171,23 @@ def build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hin
     nvvidconv_postosd.link(caps)
     caps.link(encoder)
     encoder.link(parse_out)
-    parse_out.link(mux)
-    mux.link(sink)
+    parse_out.link(q1)
+    q1.link(mux)
+    mux.link(q2)
+    q2.link(sink)
     osdsinkpad = nvosd.get_static_pad("sink")
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
+    try:
+        print("PIPELINE_READY")
+    except Exception:
+        pass
     return pipeline
 
 
 def main(args):
     Gst.init(None)
-    cap = None
-    try:
-        cap = cv2.VideoCapture(stream_path)
-    except Exception:
-        cap = None
     width_hint = None
     height_hint = None
-    if cap and cap.isOpened():
-        try:
-            width_hint = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height_hint = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        except Exception:
-            width_hint = None
-            height_hint = None
-        try:
-            cap.release()
-        except Exception:
-            pass
     loop = GLib.MainLoop()
     while True:
         pipeline = build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hint)
@@ -167,6 +195,10 @@ def main(args):
         bus.add_signal_watch()
         bus.connect("message", bus_call, loop)
         pipeline.set_state(Gst.State.PLAYING)
+        try:
+            print("PIPELINE_PLAYING")
+        except Exception:
+            pass
         try:
             loop.run()
         except Exception:
@@ -193,16 +225,20 @@ def parse_args():
     parser.add_argument("-b", "--bitrate", default=4000000, type=int)
     parser.add_argument("-e", "--enc_type", default=0, choices=[0, 1], type=int)
     parser.add_argument("--loop", default=True, action='store_true')
+    parser.add_argument("--hls_time", default=2, type=int)
+    parser.add_argument("--hls_list_size", default=5, type=int)
     if len(sys.argv)==1:
         parser.print_help(sys.stderr)
         sys.exit(1)
     args = parser.parse_args()
-    global codec, bitrate, stream_path, enc_type, loop_forever
+    global codec, bitrate, stream_path, enc_type, loop_forever, hls_time, hls_list_size
     codec = args.codec
     bitrate = args.bitrate
     stream_path = args.input
     enc_type = args.enc_type
     loop_forever = bool(args.loop)
+    hls_time = int(args.hls_time)
+    hls_list_size = int(args.hls_list_size)
     return 0
 
 if __name__ == '__main__':
