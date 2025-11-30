@@ -1,83 +1,119 @@
-# DeepStream Web UI (Option A)
+# MCP JSON — LLM IDE Quick Reference
 
-This repository provides a lightweight web server and UI that runs on Jetson (Nano/Orin) and controls an existing DeepStream REST server. The UI is responsive (desktop/mobile), proxies `/api/*` calls to DeepStream, and can serve HLS video segments for browser playback.
+## Gateway Endpoint
+- MCP HTTP: `http://<jetson-host>:3001/mcp`
+- Jetson Web App Base: `http://<jetson-host>:3000`
 
-## Prerequisites
-- Jetson with Docker and Compose plugin installed
-- DeepStream container installed and running REST on `:8080`
-- LAN access to Jetson on port `80`
-
-## Installation
-
-### A. Build on Dev Machine and Load on Jetson (recommended)
-1. Build ARM64 tar on dev machine (Docker Desktop with Buildx):
-   - `docker buildx create --use`
-   - `docker run --privileged --rm tonistiigi/binfmt --install all`
-   - `docker buildx build --platform linux/arm64 -t jetson-web:local ./jetson-web --output type=tar,dest=jetson-web.tar`
-2. Transfer to Jetson and load:
-   - `scp jetson-web.tar <jetson-user>@<jetson-ip>:/tmp/`
-   - `ssh <jetson-user>@<jetson-ip>`
-   - `sudo docker load -i /tmp/jetson-web.tar`
-3. Start web UI with Compose:
-   - `sudo docker compose up -d`
-4. Open the UI:
-   - `http://<jetson-ip>/`
-
-### B. Use Compose Build on Jetson (if Docker Hub pulls are reliable)
-1. Ensure DeepStream REST is reachable:
-   - `curl http://localhost:8080/api/v1/health`
-2. Start web UI:
-   - `sudo docker compose up -d`
-
-### C. Direct Run on Jetson (docker run)
-Run the container directly on Jetson without Compose:
-
+## Tools and JSON Requests
+- upload_file
 ```
-docker run -d --name jetson-web --restart always \
-   --network host \
-   -e PORT=80 \
-   -e DEEPSTREAM_URL=http://localhost:8080/api/v1 \
-   -e CONFIGS_DIR=/app/configs/ \
-   -v /var/run/docker.sock:/var/run/docker.sock \
-   -v /data/ds/configs:/app/configs \
-   -v /tmp/.X11-unix:/tmp/.X11-unix \
-   jetson-web
+{
+  "path": "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py",
+  "content": "<python source as string>",
+  "sha256": "<optional sha256 hex>",
+  "mode": "0644"
+}
 ```
 
-Notes:
-- Optional gate: set `JETSON_ONLY=true` to refuse startup on non-Jetson hosts.
-- `CONFIGS_DIR` should point to the mounted configs path `/app/configs/`.
-- `DEEPSTREAM_URL` points to DeepStream REST on the same Jetson.
+- validate_python
+```
+{
+  "path": "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py"
+}
+```
 
-## Configuration
-- `DEEPSTREAM_URL` default: `http://localhost:8080/api/v1`
-  - Change in `docker-compose.yml` if DeepStream isn’t on host networking
-- HLS mapping (optional): `/data/hls` on Jetson → `/app/public/video` in container
-  - `volumes: - /data/hls:/app/public/video`
+- test_python
+```
+{
+  "path": "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py",
+  "validate": true,
+  "input": "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264",
+  "codec": "H264"
+}
+```
 
-## Using the UI
-- Health: status of DeepStream connectivity
-- Stream: add/remove a source
-- Inference: update `infer_name`, `batch_size`, `interval`, `gpu_id`
-- ROI: set `stream_id`, `roi_id`, `left`, `top`, `width`, `height`
-- Video: enter `/video/stream.m3u8` and click “Play” if HLS is produced
+- tail_logs
+```
+{
+  "tail": 600
+}
+```
 
-## Troubleshooting
-- DeepStream health: `curl http://localhost:8080/api/v1/health`
-- Logs: `sudo docker compose logs -f web`
-- Firewall: ensure Jetson port `80` is accessible
-- `DEEPSTREAM_URL` mismatch: update in `docker-compose.yml`
-- Credential helper timeout on Jetson:
-  - `mkdir -p /tmp/docker-config`
-  - `printf '{"auths":{}}' > /tmp/docker-config/config.json`
-  - `sudo docker --config /tmp/docker-config compose up -d`
+- stop_python
+```
+{
+  "path": "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out.py"
+}
+```
 
-## Stopping/Updating
-- Stop: `sudo docker compose down`
-- Update with prebuild: rebuild tar on dev, reload on Jetson, then `sudo docker compose up -d`
+## Typical Flow
+1. `upload_file` (optional if file already exists)
+2. `validate_python`
+3. `test_python` (returns RTSP URL)
+4. `tail_logs` to view runtime output
 
-## Files
-- `jetson-web/server.js`
-- `jetson-web/public/index.html`
-- `jetson-web/Dockerfile`
-- `docker-compose.yml`
+## RTSP URL
+- `rtsp://<jetson-host>:8554/ds-test`
+- Use TCP transport in clients when needed: `-rtsp_transport tcp`
+
+## Canonical Pipeline Spec (Preview)
+- Use this high-level JSON to render DeepStream INI configs (future agent):
+```
+{
+  "version": 1,
+  "sources": [
+    { "type": "file", "uri": "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264", "codec": "H264" }
+  ],
+  "inference": {
+    "primary": {
+      "model": "peoplenet",
+      "precision": "fp16",
+      "config": "/data/weight_config/peoplenet_primary.txt"
+    }
+  },
+  "tracking": { "type": "nvtracker", "config": "/data/weight_config/tracker_config.yml" },
+  "osd": { "bbox": true, "text": true },
+  "sinks": [
+    { "type": "rtsp", "name": "ds-test", "port": 8554, "codec": "H264", "bitrate": 4000000 }
+  ]
+}
+```
+
+## FFmpeg Interop (Examples)
+- Publish test source to RTSP:
+```
+ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolatency -f rtsp -rtsp_transport tcp rtsp://<jetson-host>:8554/ds-test
+```
+- Play RTSP:
+```
+ffplay -rtsp_transport tcp rtsp://<jetson-host>:8554/ds-test
+```
+- HLS from UDP MPEG‑TS (browser):
+```
+ffmpeg -i udp://127.0.0.1:5600 -fflags nobuffer -flags low_delay -tune zerolatency -codec copy -hls_time 1 -hls_list_size 4 -hls_delete_threshold 1 -hls_flags delete_segments+append_list -y /app/public/video/out.m3u8
+```
+
+## LLM IDE Setup (MCP)
+- Endpoint: `http://<jetson-host>:3001/mcp` (HTTP POST)
+- Health check (optional): `http://<jetson-host>:3001/health`
+- Tools available via MCP:
+  - `upload_file`, `validate_python`, `test_python`, `tail_logs`, `stop_python`
+- Minimal provider config (example shape; adapt to your IDE):
+```
+{
+  "mcp": {
+    "providers": [
+      {
+        "name": "CiRA SPACE",
+        "type": "http",
+        "endpoint": "http://<jetson-host>:3001/mcp"
+      }
+    ]
+  }
+}
+```
+- Quick test flow from IDE:
+  - Call `validate_python` with the container path
+  - Call `test_python` with `validate=true`, `input` sample, and `codec`
+  - Call `tail_logs` to fetch recent lines
+  - Open `rtsp://<jetson-host>:8554/ds-test` in your player (use `-rtsp_transport tcp` if needed)
