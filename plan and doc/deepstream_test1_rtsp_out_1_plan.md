@@ -28,7 +28,7 @@
 6. Write runtime logs to `/data/ds/configs/ds_py_rtsp_out.txt`; add health checks
    - Status: finished
 7. Upload, validate, start via MCP; verify Output tab plays continuously; stop and cleanly tear down
-   - Status: finished
+   - Status: finished (re-run with new ffmpeg sidecar)
 
 ## Control and Verification
 - Start script: `POST /api/mcp/test_python` with path `.../deepstream_test1_rtsp_out_1.py` and input `'/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264'`

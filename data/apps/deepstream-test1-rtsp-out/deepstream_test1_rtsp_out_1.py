@@ -136,22 +136,6 @@ def build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hin
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
     return pipeline
 
-def start_ffmpeg_hls(port):
-    try:
-        os.makedirs("/app/public/video", exist_ok=True)
-    except Exception:
-        pass
-    cmd = [
-        "ffmpeg","-hide_banner","-loglevel","warning","-fflags","nobuffer","-flags","low_delay",
-        "-i", f"udp://127.0.0.1:{port}",
-        "-c:v","copy","-c:a","aac","-f","hls","-hls_time","2","-hls_list_size","5","-hls_flags","delete_segments",
-        "/app/public/video/out.m3u8"
-    ]
-    try:
-        p = subprocess.Popen(cmd)
-    except Exception:
-        p = None
-    return p
 
 def main(args):
     Gst.init(None)
@@ -173,7 +157,6 @@ def main(args):
             cap.release()
         except Exception:
             pass
-    ff_proc = start_ffmpeg_hls(5600)
     loop = GLib.MainLoop()
     while True:
         pipeline = build_pipeline(stream_path, codec, bitrate, enc_type, width_hint, height_hint)
@@ -196,8 +179,7 @@ def main(args):
         except Exception:
             pass
     try:
-        if ff_proc:
-            ff_proc.terminate()
+        pass
     except Exception:
         pass
 
@@ -223,4 +205,3 @@ def parse_args():
 if __name__ == '__main__':
     parse_args()
     sys.exit(main(sys.argv))
-

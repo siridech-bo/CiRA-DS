@@ -36,6 +36,8 @@ const IS_JETSON = String(process.env.IS_JETSON || "false").toLowerCase() === "tr
 if (JETSON_ONLY && !(isJetsonHost() || IS_JETSON)) {
   console.error("JETSON_ONLY=true: Jetson not detected, continuing startup");
 }
+const BLOCK_LOCAL = String(process.env.BLOCK_LOCAL || "").toLowerCase() === "1";
+function devBlocked() { return BLOCK_LOCAL && !(isJetsonHost() || IS_JETSON); }
 const DEEPSTREAM_URL = process.env.DEEPSTREAM_URL || "http://localhost:8080/api/v1";
 let messages = [];
 
@@ -235,6 +237,7 @@ app.post("/api/hls/start", async (req, res) => {
   const hlsListSize = Number((req.body && req.body.hls_list_size) || 5);
   const target = "/app/public/video/out.m3u8";
   const hostTarget = "/data/hls/out.m3u8";
+  if (devBlocked()) return res.status(403).json({ error: "blocked_on_dev" });
   if (!uri) return res.status(400).json({ error: "uri required" });
   if (uri.startsWith("/media/")) { uri = "/data/videos/" + uri.slice(7); }
   const isRtsp = uri.startsWith("rtsp://");
@@ -246,9 +249,32 @@ app.post("/api/hls/start", async (req, res) => {
   await dockerRequest("DELETE", "/containers/ds_hls?force=true");
   let ok = false, used = "";
   const ffimg = String((req.body && req.body.image) || "lscr.io/linuxserver/ffmpeg:latest");
-  const ffCmd = isRtsp
-    ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
-    : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
+  let ffCmd = [];
+  if (isRtsp) {
+    ffCmd = [
+      "-hide_banner","-nostats","-loglevel","warning","-fflags","nobuffer","-flags","low_delay",
+      "-rtsp_transport","tcp","-i", uri,
+      "-c:v","copy",
+      "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+      target
+    ];
+  } else if (isUdp) {
+    ffCmd = [
+      "-hide_banner","-nostats","-loglevel","warning","-fflags","nobuffer","-flags","low_delay",
+      "-i", uri,
+      "-c:v","copy",
+      "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+      target
+    ];
+  } else {
+    ffCmd = [
+      "-hide_banner","-nostats","-loglevel","warning","-re",
+      "-i", uri,
+      "-c:v","copy",
+      "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+      target
+    ];
+  }
   if (isUdp) {
     try {
       const cmd = `nohup gst-launch-1.0 -vv udpsrc uri='${uri}' ! tsdemux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink} &`;
@@ -274,8 +300,9 @@ app.post("/api/hls/start", async (req, res) => {
     if (start.statusCode >= 200 && start.statusCode < 300) {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
-        await new Promise(r => setTimeout(r, 15000));
-        await fs.promises.access(hostTarget, fs.constants.R_OK);
+        let found = false;
+        for (let i = 0; i < 30; i++) { try { await fs.promises.access(hostTarget, fs.constants.R_OK); found = true; break; } catch {} await new Promise(r => setTimeout(r, 1000)); }
+        if (!found) throw new Error("playlist_missing");
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
         try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
@@ -318,9 +345,32 @@ app.post("/api/hls/start", async (req, res) => {
   }
   if (!ok) {
     const ffimg = String((req.body && req.body.image) || "jrottenberg/ffmpeg:4.4-alpine");
-    const ffCmd = isRtsp
-      ? ["-hide_banner","-loglevel","warning","-rtsp_transport","tcp","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target]
-      : ["-hide_banner","-loglevel","warning","-re","-i", uri, "-c:v","copy","-c:a","aac","-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments", target];
+    let ffCmd = [];
+    if (isRtsp) {
+      ffCmd = [
+        "-hide_banner","-nostats","-loglevel","warning","-fflags","nobuffer","-flags","low_delay",
+        "-rtsp_transport","tcp","-i", uri,
+        "-c:v","copy",
+        "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+        target
+      ];
+    } else if (isUdp) {
+      ffCmd = [
+        "-hide_banner","-nostats","-loglevel","warning","-fflags","nobuffer","-flags","low_delay",
+        "-i", uri,
+        "-c:v","copy",
+        "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+        target
+      ];
+    } else {
+      ffCmd = [
+        "-hide_banner","-nostats","-loglevel","warning","-re",
+        "-i", uri,
+        "-c:v","copy",
+        "-f","hls","-hls_time", String(Math.max(1,hlsTime)), "-hls_list_size", String(Math.max(1,hlsListSize)), "-hls_flags","delete_segments",
+        target
+      ];
+    }
     await dockerRequest("DELETE", "/containers/ds_hls?force=true");
     let created = await dockerRequest("POST", "/containers/create?name=ds_hls", { Image: ffimg, Cmd: ffCmd, HostConfig: { NetworkMode: "host", Binds: binds } });
     if (!(created.statusCode >= 200 && created.statusCode < 300)) {
@@ -333,8 +383,9 @@ app.post("/api/hls/start", async (req, res) => {
     if (start.statusCode >= 200 && start.statusCode < 300) {
       ok = true; used = `ffmpeg ${ffCmd.join(" ")}`;
       try {
-        await new Promise(r => setTimeout(r, 15000));
-        await fs.promises.access(hostTarget, fs.constants.R_OK);
+        let found = false;
+        for (let i = 0; i < 30; i++) { try { await fs.promises.access(hostTarget, fs.constants.R_OK); found = true; break; } catch {} await new Promise(r => setTimeout(r, 1000)); }
+        if (!found) throw new Error("playlist_missing");
       } catch {
         try { await dockerRequest("POST", "/containers/ds_hls/stop"); } catch {}
         try { await dockerRequest("DELETE", "/containers/ds_hls?force=true"); } catch {}
@@ -378,6 +429,40 @@ app.post("/api/hls/clear", async (_req, res) => {
     res.json({ ok: true, deleted });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/e2e/rtsp_out_1", async (req, res) => {
+  try {
+    if (devBlocked()) return res.status(403).json({ error: "blocked_on_dev" });
+    const info = await dockerRequest("GET", "/containers/ds_python/json");
+    let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+    if (!running) {
+      try { await axios.post(`http://127.0.0.1:${PORT}/api/dspython/start`, { install: false, useGit: false }); } catch {}
+      await new Promise(r => setTimeout(r, 6000));
+    }
+    const pathPy = "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out_1.py";
+    const input = "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264";
+    let rtsp = null;
+    try {
+      const r = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/test_python`, { path: pathPy, validate: true, input, codec: "H264" });
+      rtsp = (r.data && r.data.rtsp) || null;
+    } catch (e) {
+      return res.status(500).json({ error: "python_start_failed", detail: String(e && e.message || e) });
+    }
+    let hls = null, pipeline = null;
+    try {
+      const r = await axios.post(`http://127.0.0.1:${PORT}/api/hls/start`, { uri: "udp://127.0.0.1:5600", hls_time: Number((req.body && req.body.hls_time) || 2), hls_list_size: Number((req.body && req.body.hls_list_size) || 5), image: (req.body && req.body.image) || undefined });
+      hls = (r.data && r.data.playlist) || null; pipeline = (r.data && r.data.pipeline) || null;
+    } catch (e) {
+      return res.status(500).json({ error: "hls_start_failed", detail: String(e && e.message || e) });
+    }
+    let ok = false;
+    for (let i = 0; i < 30; i++) { try { await fs.promises.access("/data/hls/out.m3u8", fs.constants.R_OK); ok = true; break; } catch {} await new Promise(r => setTimeout(r, 500)); }
+    if (!ok) return res.status(500).json({ error: "playlist_missing" });
+    res.json({ ok: true, playlist: hls || "/video/out.m3u8", pipeline, rtsp });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
   }
 });
 
@@ -816,6 +901,7 @@ app.get("/api/dsapp/samples", (_req, res) => {
 
   app.post("/api/dspython/start", async (req, res) => {
     try {
+      if (devBlocked()) return res.status(403).json({ error: "blocked_on_dev" });
       const shouldInstall = !!(req.body && req.body.install);
       const useGit = !!(req.body && req.body.useGit);
       const image = (req.body && req.body.image) || DS_IMAGE;
@@ -1727,6 +1813,42 @@ mcpServer.registerTool(
     const r = await axios.get(`http://127.0.0.1:${PORT}/api/hls/logs`);
     const text = typeof r.data === "string" ? r.data : JSON.stringify(r.data);
     return { content: [{ type: "text", text }], structuredContent: { text } };
+  }
+);
+
+mcpServer.registerTool(
+  "start_python",
+  {
+    title: "Start Python backend",
+    description: "Start ds_python container",
+    inputSchema: { install: z.boolean().optional(), useGit: z.boolean().optional(), image: z.string().optional() },
+    outputSchema: { status: z.string().optional(), error: z.string().optional() }
+  },
+  async ({ install = false, useGit = false, image }) => {
+    const r = await axios.post(`http://127.0.0.1:${PORT}/api/dspython/start`, { install, useGit, image });
+    const data = r.data;
+    return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+  }
+);
+
+mcpServer.registerTool(
+  "e2e_rtsp_out_1",
+  {
+    title: "E2E: deepstream_test1_rtsp_out_1",
+    description: "Start ds_python, run DS Python app, start HLS sidecar, return playlist",
+    inputSchema: { path: z.string().optional(), input: z.string().optional(), codec: z.string().optional(), hls_time: z.number().optional(), hls_list_size: z.number().optional(), image: z.string().optional() },
+    outputSchema: { ok: z.boolean().optional(), playlist: z.string().optional(), pipeline: z.string().optional(), rtsp: z.string().optional(), error: z.string().optional() }
+  },
+  async ({ path, input, codec = "H264", hls_time = 2, hls_list_size = 5, image }) => {
+    const p = path || "/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps/apps/deepstream-test1-rtsp-out/deepstream_test1_rtsp_out_1.py";
+    const inp = input || "/opt/nvidia/deepstream/deepstream-6.0/samples/streams/sample_720p.h264";
+    try { await axios.post(`http://127.0.0.1:${PORT}/api/dspython/start`, { install: false, useGit: false }); } catch {}
+    await new Promise(r => setTimeout(r, 5000));
+    const t = await axios.post(`http://127.0.0.1:${PORT}/api/mcp/test_python`, { path: p, validate: true, input: inp, codec });
+    const rtsp = (t.data && t.data.rtsp) || null;
+    const h = await axios.post(`http://127.0.0.1:${PORT}/api/hls/start`, { uri: "udp://127.0.0.1:5600", hls_time, hls_list_size, image });
+    const playlist = (h.data && h.data.playlist) || "/video/out.m3u8";
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true, playlist, pipeline: h.data && h.data.pipeline, rtsp }) }], structuredContent: { ok: true, playlist, pipeline: h.data && h.data.pipeline, rtsp } };
   }
 );
 
