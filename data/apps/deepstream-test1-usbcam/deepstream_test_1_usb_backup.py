@@ -200,20 +200,16 @@ def main(args):
         print("Creating nv3dsink \n")
         sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
         if not sink:
-            print("nv3dsink not available, falling back to nveglglessink \n")
-            sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+            sys.stderr.write(" Unable to create nv3dsink \n")
     else:
         if platform_info.is_platform_aarch64():
             print("Creating nv3dsink \n")
             sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
-            if not sink:
-                print("nv3dsink not available, falling back to nveglglessink \n")
-                sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
         else:
             print("Creating EGLSink \n")
             sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
-    if not sink:
-        sys.stderr.write(" Unable to create display sink \n")
+        if not sink:
+            sys.stderr.write(" Unable to create egl sink \n")
 
     print("Playing cam %s " %args[1])
     caps_v4l2src.set_property('caps', Gst.Caps.from_string("video/x-raw, framerate=30/1"))
@@ -248,7 +244,7 @@ def main(args):
     vidconvsrc.link(nvvidconvsrc)
     nvvidconvsrc.link(caps_vidconvsrc)
 
-    sinkpad = streammux.get_request_pad("sink_0")
+    sinkpad = streammux.request_pad_simple("sink_0")
     if not sinkpad:
         sys.stderr.write(" Unable to get the sink pad of streammux \n")
     srcpad = caps_vidconvsrc.get_static_pad("src")
@@ -287,4 +283,3 @@ def main(args):
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
-
