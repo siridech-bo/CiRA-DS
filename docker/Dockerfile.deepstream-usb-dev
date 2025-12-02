@@ -1,0 +1,24 @@
+FROM nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
+
+# Install Python GI and GStreamer bindings for Python
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      python3-gi \
+      python3-gst-1.0 \
+      gir1.2-gstreamer-1.0 \
+      gir1.2-gst-plugins-base-1.0 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Runtime env
+ENV PYTHONPATH=/app:/app/common
+ENV DISPLAY=:0
+
+WORKDIR /app
+RUN mkdir -p /app/common
+
+# Optional: provide pyds_ext at build time by adding it to the build context
+# COPY pyds_ext /app/pyds_ext
+
+# Default command for dev (override in run commands for production)
+CMD ["sleep", "infinity"]
+

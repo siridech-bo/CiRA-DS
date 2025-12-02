@@ -55,10 +55,10 @@
 [property]
 gpu-id=0
 net-scale-factor=0.00392156862745098
-onnx-file=../../../../samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx
-model-engine-file=../../../../samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx_b1_gpu0_fp16.engine
-labelfile-path=../../../../samples/models/Primary_Detector/labels.txt
-int8-calib-file=../../../../samples/models/Primary_Detector/cal_trt.bin
+tlt-model-key=tlt_encode
+tlt-encoded-model=/app/models/trafficcamnet/resnet18_trafficcamnet_pruned.etlt
+labelfile-path=/app/models/trafficcamnet/labels_trafficnet.txt
+int8-calib-file=/app/models/trafficcamnet/trafficnet_int8.txt
 batch-size=1
 process-mode=1
 model-color-format=0
@@ -70,6 +70,13 @@ gie-unique-id=1
 #scaling-filter=0
 #scaling-compute-hw=0
 cluster-mode=2
+network-type=0
+parse-bbox-func-name=NvDsInferParseCustomResnet
+custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/lib/libnvds_infercustomparser.so
+input-dims=3;960;544;0
+uff-input-order=0
+uff-input-blob-name=input_1
+maintain-aspect-ratio=1
 
 [class-attrs-all]
 pre-cluster-threshold=0.2

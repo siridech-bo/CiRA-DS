@@ -5,6 +5,36 @@
 - Jetson reachable over network; user password available.
 - X11 on Jetson with local display: set `DISPLAY=:0` and allow root clients.
 
+## OpenSSH Key-Based, Non-Interactive Setup (Reusable)
+- Generate an ed25519 key (fast, secure):
+  - `ssh-keygen -t ed25519 -f C:\Users\<you>\.ssh\id_ed25519 -N ""`
+- Harden config entry for Jetson:
+  - Edit `C:\Users\<you>\.ssh\config` and add:
+    ```
+    Host jetson
+      HostName 192.168.1.200
+      User user
+      Port 22
+      IdentityFile C:\Users\<you>\.ssh\id_ed25519
+      IdentitiesOnly yes
+      PubkeyAuthentication yes
+      PasswordAuthentication no
+      StrictHostKeyChecking accept-new
+      ServerAliveInterval 30
+      ServerAliveCountMax 3
+    ```
+- Install your public key on Jetson:
+  - `scp -F C:\Users\<you>\.ssh\config C:\Users\<you>\.ssh\id_ed25519.pub jetson:/tmp/id_ed25519.pub`
+  - `ssh -F C:\Users\<you>\.ssh\config jetson "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat /tmp/id_ed25519.pub >> ~/.ssh/authorized_keys && rm /tmp/id_ed25519.pub && chmod 600 ~/.ssh/authorized_keys"`
+- Verify non-interactive SSH/scp:
+  - `ssh -F C:\Users\<you>\.ssh\config -o BatchMode=yes jetson "echo NONINTERACTIVE_OK && hostname"`
+  - `scp -F C:\Users\<you>\.ssh\config -o BatchMode=yes C:\Users\<you>\.ssh\config jetson:/tmp/ssh_config_copy_test`
+
+### Notes (Windows)
+- Use single quotes around remote commands to prevent PowerShell from expanding env vars: `ssh jetson 'echo $DISPLAY'`.
+- `ssh-agent` is optional; OpenSSH picks up `IdentityFile` directly. For agent:
+  - Start service: `Start-Service ssh-agent` and `ssh-add C:\Users\<you>\.ssh\id_ed25519`.
+
 ### Example SSH Config
 ```
 Host jetson
@@ -70,8 +100,13 @@ Host jetson
 - No window appears:
   - Re-run `xhost +local:root`, ensure `DISPLAY=:0`, and verify `nv3dsink`/`nveglglessink` availability.
 
+## Minimal One-Liners
+- Upload all:
+  - `scp -F C:\Users\<you>\.ssh\config "D:\CiRA DS app\data\apps\deepstream-test1-usbcam\deepstream_test_1_usb.py" jetson:/data/ds/share/ && scp -F C:\Users\<you>\.ssh\config "D:\CiRA DS app\data\apps\deepstream-test1-usbcam\dstest1_pgie_config.txt" jetson:/data/ds/share/ && scp -r -F C:\Users\<you>\.ssh\config "D:\CiRA DS app\data\apps\common" jetson:/data/ds/common`
+- Run now (samples image):
+  - `ssh -F C:\Users\<you>\.ssh\config jetson "export DISPLAY=:0; xhost +local:root || true; docker run --rm --runtime nvidia --network host --privileged -e DISPLAY=:0 -e PYTHONPATH=/app:/app/common -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v /data/ds/share:/app/share -v /data/ds/common:/app/common --device=/dev/video0 nvcr.io/nvidia/deepstream-l4t:6.0.1-samples bash -lc \"apt update && apt install -y python3-gi python3-gst-1.0 && python3 /app/share/deepstream_test_1_usb.py /dev/video0\""`
+
 ## Code References
 - Live-source and pad request: `data/apps/deepstream-test1-usbcam/deepstream_test_1_usb.py:241-246`, `data/apps/deepstream-test1-usbcam/deepstream_test_1_usb.py:270-276`
 - RGBA capsfilter: `data/apps/deepstream-test1-usbcam/deepstream_test_1_usb.py:213-216`, `236-240`, `256-281`
 - PGIE config default and override: `data/apps/deepstream-test1-usbcam/deepstream_test_1_usb.py:245`, `241-246`
-

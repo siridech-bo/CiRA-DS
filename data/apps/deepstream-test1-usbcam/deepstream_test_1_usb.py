@@ -29,7 +29,10 @@ gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst
 try:
     from common.platform_info import PlatformInfo
-    platform_info = PlatformInfo()
+    try:
+        platform_info = PlatformInfo()
+    except Exception:
+        pass
 except Exception:
     class _PI:
         def is_integrated_gpu(self):
@@ -64,12 +67,12 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
     }
     num_rects=0
     if pyds is None:
-        return
+        return Gst.PadProbeReturn.OK
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         print("Unable to get GstBuffer ")
-        return
+        return Gst.PadProbeReturn.OK
 
     # Retrieve batch metadata from the gst_buffer
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
@@ -146,7 +149,11 @@ def main(args):
         sys.stderr.write("usage: %s <v4l2-device-path>\n" % args[0])
         sys.exit(1)
 
-    platform_info = PlatformInfo()
+    global platform_info
+    try:
+        platform_info = PlatformInfo()
+    except Exception:
+        pass
     # Standard GStreamer initialization
     Gst.init(None)
 
@@ -243,7 +250,9 @@ def main(args):
     streammux.set_property('batch-size', 1)
     streammux.set_property('batched-push-timeout', MUXER_BATCH_TIMEOUT_USEC)
     streammux.set_property('live-source', 1)
-    pgie_config = os.getenv('DS_PGIE_CONFIG', "dstest1_pgie_config.txt")
+    sample_pgie = "/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/config_infer_primary.txt"
+    default_pgie = sample_pgie if os.path.exists(sample_pgie) else "dstest1_pgie_config.txt"
+    pgie_config = os.getenv('DS_PGIE_CONFIG', default_pgie)
     pgie.set_property('config-file-path', pgie_config)
     sink.set_property('sync', False)
     try:
@@ -273,7 +282,7 @@ def main(args):
     vidconvsrc.link(nvvidconvsrc)
     nvvidconvsrc.link(caps_vidconvsrc)
 
-    sinkpad = streammux.request_pad_simple("sink_0")
+    sinkpad = streammux.get_request_pad("sink_0")
     if not sinkpad:
         sys.stderr.write(" Unable to get the sink pad of streammux \n")
     srcpad = caps_vidconvsrc.get_static_pad("src")
