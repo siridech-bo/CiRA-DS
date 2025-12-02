@@ -20,12 +20,32 @@
 import sys
 sys.path.append('../')
 import gi
+import sys
+import os
+sys.path.insert(0, '/data/ds')
+sys.path.insert(0, '/data/ds/common')
+import os
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst
-from common.platform_info import PlatformInfo
+try:
+    from common.platform_info import PlatformInfo
+    platform_info = PlatformInfo()
+except Exception:
+    class _PI:
+        def is_integrated_gpu(self):
+            return False
+        def is_platform_aarch64(self):
+            return True
+    platform_info = _PI()
 from common.bus_call import bus_call
 
-import pyds
+try:
+    import pyds as pyds
+except Exception:
+    try:
+        import pyds_ext as pyds
+    except Exception:
+        pyds = None
 
 PGIE_CLASS_ID_VEHICLE = 0
 PGIE_CLASS_ID_BICYCLE = 1
@@ -43,6 +63,8 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
         PGIE_CLASS_ID_ROADSIGN:0
     }
     num_rects=0
+    if pyds is None:
+        return
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
@@ -188,29 +210,25 @@ def main(args):
     nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "convertor")
     if not nvvidconv:
         sys.stderr.write(" Unable to create nvvidconv \n")
+    caps_rgba = Gst.ElementFactory.make("capsfilter", "caps_rgba")
+    if not caps_rgba:
+        sys.stderr.write(" Unable to create RGBA capsfilter \n")
 
     # Create OSD to draw on the converted RGBA buffer
     nvosd = Gst.ElementFactory.make("nvdsosd", "onscreendisplay")
-
     if not nvosd:
         sys.stderr.write(" Unable to create nvosd \n")
 
-    # Finally render the osd output
     if platform_info.is_integrated_gpu():
-        print("Creating nv3dsink \n")
         sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
         if not sink:
-            print("nv3dsink not available, falling back to nveglglessink \n")
             sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
     else:
         if platform_info.is_platform_aarch64():
-            print("Creating nv3dsink \n")
             sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
             if not sink:
-                print("nv3dsink not available, falling back to nveglglessink \n")
                 sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
         else:
-            print("Creating EGLSink \n")
             sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
     if not sink:
         sys.stderr.write(" Unable to create display sink \n")
@@ -218,14 +236,20 @@ def main(args):
     print("Playing cam %s " %args[1])
     caps_v4l2src.set_property('caps', Gst.Caps.from_string("video/x-raw, framerate=30/1"))
     caps_vidconvsrc.set_property('caps', Gst.Caps.from_string("video/x-raw(memory:NVMM)"))
+    caps_rgba.set_property('caps', Gst.Caps.from_string("video/x-raw(memory:NVMM), format=RGBA"))
     source.set_property('device', args[1])
     streammux.set_property('width', 1920)
     streammux.set_property('height', 1080)
     streammux.set_property('batch-size', 1)
     streammux.set_property('batched-push-timeout', MUXER_BATCH_TIMEOUT_USEC)
-    pgie.set_property('config-file-path', "dstest1_pgie_config.txt")
-    # Set sync = false to avoid late frame drops at the display-sink
+    streammux.set_property('live-source', 1)
+    pgie_config = os.getenv('DS_PGIE_CONFIG', "dstest1_pgie_config.txt")
+    pgie.set_property('config-file-path', pgie_config)
     sink.set_property('sync', False)
+    try:
+        sink.set_property('qos', 0)
+    except Exception:
+        pass
 
     print("Adding elements to Pipeline \n")
     pipeline.add(source)
@@ -236,6 +260,7 @@ def main(args):
     pipeline.add(streammux)
     pipeline.add(pgie)
     pipeline.add(nvvidconv)
+    pipeline.add(caps_rgba)
     pipeline.add(nvosd)
     pipeline.add(sink)
 
@@ -248,7 +273,7 @@ def main(args):
     vidconvsrc.link(nvvidconvsrc)
     nvvidconvsrc.link(caps_vidconvsrc)
 
-    sinkpad = streammux.get_request_pad("sink_0")
+    sinkpad = streammux.request_pad_simple("sink_0")
     if not sinkpad:
         sys.stderr.write(" Unable to get the sink pad of streammux \n")
     srcpad = caps_vidconvsrc.get_static_pad("src")
@@ -257,7 +282,8 @@ def main(args):
     srcpad.link(sinkpad)
     streammux.link(pgie)
     pgie.link(nvvidconv)
-    nvvidconv.link(nvosd)
+    nvvidconv.link(caps_rgba)
+    caps_rgba.link(nvosd)
     nvosd.link(sink)
 
     # create an event loop and feed gstreamer bus mesages to it
