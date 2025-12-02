@@ -163,7 +163,14 @@ def main(args):
     snap_enabled = {"value": False}
     snap_period_ms = {"value": 1000}
     last_snap = {"ts": 0}
-    out_dir = {"path": "/data/ds/datasets/autocap"}
+    snap_dir_env = os.getenv('DS_SNAPSHOT_DIR', '/data/ds/datasets/autocap')
+    out_dir = {"path": snap_dir_env}
+    try:
+        env_ms = int(os.getenv('DS_SNAPSHOT_PERIOD_MS', '0'))
+        snap_period_ms["value"] = max(0, env_ms)
+        snap_enabled["value"] = snap_period_ms["value"] > 0
+    except Exception:
+        pass
     def _on_start(_):
         snap_enabled["value"] = True
     def _on_stop(_):
@@ -419,7 +426,9 @@ def main(args):
     print("Starting pipeline \n")
     if roslibpy is not None:
         try:
-            ros = roslibpy.Ros(host='localhost', port=9090)
+            ros_host = os.getenv('DS_ROS_HOST', 'localhost')
+            ros_port = int(os.getenv('DS_ROS_PORT', '9090'))
+            ros = roslibpy.Ros(host=ros_host, port=ros_port)
             ros.run()
             det_pub = roslibpy.Topic(ros, '/deepstream/detections_json', 'std_msgs/String')
             img_b64_pub = roslibpy.Topic(ros, '/deepstream/image_osd_jpeg_b64', 'std_msgs/String')

@@ -11,6 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import * as z from "zod/v4";
 import crypto from "crypto";
+import WebSocket from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -154,6 +155,36 @@ const AUTOCAP_DIR = process.env.AUTOCAP_DIR || "/data/ds/datasets/autocap";
 app.use("/snapshots", express.static(SNAP_DIR));
 app.use("/media", express.static(MEDIA_DIR));
 app.use("/autocap", express.static(AUTOCAP_DIR));
+
+const ROS_HOST = process.env.ROS_BRIDGE_HOST || "127.0.0.1";
+const ROS_PORT = Number(process.env.ROS_BRIDGE_PORT || 9090);
+
+function rosbridgePublishOnce(topic, type, msg, host, port) {
+  return new Promise((resolve) => {
+    try {
+      const h = host || ROS_HOST;
+      const p = Number(port || ROS_PORT);
+      const ws = new WebSocket(`ws://${h}:${p}/`);
+      let done = false;
+      ws.on("open", () => {
+        try { ws.send(JSON.stringify({ op: "advertise", topic, type })); } catch {}
+        try { ws.send(JSON.stringify({ op: "publish", topic, msg })); } catch {}
+        try { ws.send(JSON.stringify({ op: "unadvertise", topic })); } catch {}
+        done = true;
+        try { ws.close(); } catch {}
+        resolve({ ok: true });
+      });
+      ws.on("error", (_e) => {
+        if (!done) resolve({ ok: false });
+      });
+      ws.on("close", () => {
+        if (!done) resolve({ ok: true });
+      });
+    } catch (_e) {
+      resolve({ ok: false });
+    }
+  });
+}
 
 app.post("/api/snapshot/start", async (req, res) => {
   let uri = (req.body && req.body.uri) || "";
@@ -560,6 +591,28 @@ app.get("/api/autocap/list", async (req, res) => {
   } catch (e) {
     res.json({ files: [] });
   }
+});
+
+app.post("/api/ros/snapshot/start", async (req, res) => {
+  const host = (req.body && req.body.host) || ROS_HOST;
+  const port = Number((req.body && req.body.port) || ROS_PORT);
+  const r = await rosbridgePublishOnce("/deepstream/snapshot/start", "std_msgs/Empty", {}, host, port);
+  res.json({ ok: !!r.ok });
+});
+
+app.post("/api/ros/snapshot/stop", async (req, res) => {
+  const host = (req.body && req.body.host) || ROS_HOST;
+  const port = Number((req.body && req.body.port) || ROS_PORT);
+  const r = await rosbridgePublishOnce("/deepstream/snapshot/stop", "std_msgs/Empty", {}, host, port);
+  res.json({ ok: !!r.ok });
+});
+
+app.post("/api/ros/snapshot/period", async (req, res) => {
+  const host = (req.body && req.body.host) || ROS_HOST;
+  const port = Number((req.body && req.body.port) || ROS_PORT);
+  const ms = Math.max(0, Number((req.body && req.body.ms) || 0));
+  const r = await rosbridgePublishOnce("/deepstream/snapshot/period_ms", "std_msgs/Int32", { data: ms }, host, port);
+  res.json({ ok: !!r.ok, ms });
 });
 
 app.get("/api/media/list", async (_req, res) => {
