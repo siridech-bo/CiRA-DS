@@ -122,4 +122,16 @@
 - Risks and Mitigations
   - DeepStream path drift mitigated by runtime detection and fallback.
   - X11 policy variance mitigated with `localuser:root` and documentation.
-  - GPU access issues mitigated by running container as root.
+- GPU access issues mitigated by running container as root.
+
+## Conclusion
+- Phases 1–3 completed:
+  - Built `deepstream-usb-dev:6.0.1` with GI bindings and persistent CMD.
+  - Prepared Jetson X11 and launched persistent dev container.
+  - Standardized dev/prod runs via `scripts/deepstream_usb_run.sh`.
+- Phases 5–6 completed:
+  - Dev run successful; X11 video renders with bounding boxes and captions.
+  - Validation passed: PGIE sample config loaded; engine serialized; OSD overlays stable; pipeline healthy.
+- Phase 7 not required:
+  - Production run target defined in the script, but not executed per request.
+- Current state is stable and repeatable using the dev script.

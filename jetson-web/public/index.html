@@ -216,6 +216,22 @@
       </div>
       <div class="status" id="jsonLogs" style="white-space:pre-wrap"></div>
     </div>
+    <div class="card">
+      <h2>Dataset Images</h2>
+      <div class="row">
+        <select id="autocapKind">
+          <option value="any">Any</option>
+          <option value="clean">Clean</option>
+          <option value="osd">OSD</option>
+        </select>
+        <button onclick="refreshAutocap()">Refresh</button>
+        <button onclick="prevAutocap()">Prev</button>
+        <button onclick="nextAutocap()">Next</button>
+      </div>
+      <img id="autocapImage" style="max-width:100%;height:auto;object-fit:contain" />
+      <div class="status" id="autocapName"></div>
+      <div class="status" id="autocapIndex"></div>
+    </div>
   </div>
   <div class="grid" id="tab-input">
     <div class="card">
@@ -822,6 +838,10 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
     async function stopRtsp() { try { const r = await fetch('/api/rtsp/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('rtspStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
     async function logsRtsp() { try { const r = await fetch('/api/rtsp/logs'); const t = await r.text(); document.getElementById('rtspStatus').textContent = t; } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
     async function refreshJsonLogs() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const lines = t.split(/\r?\n/).filter(x => /\{.*\}/.test(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
+    async function refreshAutocap() { try { const kind = String(document.getElementById('autocapKind').value || 'any'); const r = await fetch('/api/autocap/list?kind=' + encodeURIComponent(kind) + '&limit=2000'); const j = await r.json(); window.autocapFiles = Array.isArray(j.files) ? j.files : []; window.autocapIndex = window.autocapFiles.length ? window.autocapFiles.length - 1 : 0; showAutocap(window.autocapIndex); } catch (e) { document.getElementById('autocapName').textContent = e.message; } }
+    function showAutocap(i) { const files = window.autocapFiles || []; if (!files.length) { document.getElementById('autocapName').textContent = 'No images'; document.getElementById('autocapImage').src = ''; document.getElementById('autocapIndex').textContent = ''; return; } if (i < 0) i = 0; if (i >= files.length) i = files.length - 1; window.autocapIndex = i; const f = files[i]; document.getElementById('autocapImage').src = '/autocap/' + encodeURIComponent(f); document.getElementById('autocapName').textContent = f; document.getElementById('autocapIndex').textContent = String(i + 1) + ' / ' + String(files.length); }
+    function prevAutocap() { try { showAutocap((window.autocapIndex || 0) - 1); } catch {} }
+    function nextAutocap() { try { showAutocap((window.autocapIndex || 0) + 1); } catch {} }
     async function loadAdminEnv() { try { const r = await fetch('/api/admin/env'); const j = await r.json(); document.getElementById('adminEnv').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminEnv').textContent = e.message; } }
     async function loadAdminContainers() { try { const r = await fetch('/api/admin/containers'); const j = await r.json(); document.getElementById('adminContainers').textContent = JSON.stringify(j); } catch (e) { document.getElementById('adminContainers').textContent = e.message; } }
     function useInputSourceForPy() { const src = (document.getElementById('hlsUrl').value || document.getElementById('streamUri').value || '').trim(); const el = document.getElementById('pySrcUri'); if (el) el.value = src; }

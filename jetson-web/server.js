@@ -150,8 +150,10 @@ const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "siridech2/deepstream-l4t:pyds-
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
 const MEDIA_DIR = process.env.MEDIA_DIR || "/data/videos";
+const AUTOCAP_DIR = process.env.AUTOCAP_DIR || "/data/ds/datasets/autocap";
 app.use("/snapshots", express.static(SNAP_DIR));
 app.use("/media", express.static(MEDIA_DIR));
+app.use("/autocap", express.static(AUTOCAP_DIR));
 
 app.post("/api/snapshot/start", async (req, res) => {
   let uri = (req.body && req.body.uri) || "";
@@ -531,6 +533,29 @@ app.get("/api/snapshot/list", async (req, res) => {
     }));
     stats.sort((a, b) => b.t - a.t);
     const limit = Math.max(1, Math.min(Number(req.query.limit || 20), 100000));
+    res.json({ files: stats.slice(0, limit).map(x => x.f) });
+  } catch (e) {
+    res.json({ files: [] });
+  }
+});
+
+app.get("/api/autocap/list", async (req, res) => {
+  try {
+    const kind = String((req.query && req.query.kind) || "any").toLowerCase();
+    const files = await fs.promises.readdir(AUTOCAP_DIR);
+    const jpgs = files.filter(f => {
+      const n = f.toLowerCase();
+      if (!n.endsWith(".jpg")) return false;
+      if (kind === "clean") return n.endsWith("_clean.jpg");
+      if (kind === "osd") return n.endsWith("_osd.jpg");
+      return true;
+    });
+    const stats = await Promise.all(jpgs.map(async f => {
+      const s = await fs.promises.stat(path.join(AUTOCAP_DIR, f));
+      return { f, t: s.mtimeMs };
+    }));
+    stats.sort((a, b) => b.t - a.t);
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 2000), 100000));
     res.json({ files: stats.slice(0, limit).map(x => x.f) });
   } catch (e) {
     res.json({ files: [] });
