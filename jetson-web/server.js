@@ -1854,6 +1854,64 @@ app.get("/sse/detections", async (req, res) => {
   }
 });
 
+async function _rosPublish(topic, msg, host, port) {
+  return await new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(`ws://${host}:${String(port)}/`);
+      let done = false;
+      function finish(ok) { if (done) return; done = true; try { ws.close(); } catch {} resolve(!!ok); }
+      ws.on("open", () => { try { ws.send(JSON.stringify({ op: "publish", topic, msg })); } catch {} setTimeout(() => finish(true), 150); });
+      ws.on("error", () => finish(false));
+      ws.on("close", () => finish(true));
+    } catch { resolve(false); }
+  });
+}
+
+app.post("/api/ros/snapshot/start", async (req, res) => {
+  try {
+    const host = String((req.body && req.body.host) || process.env.DS_ROS_HOST || "127.0.0.1");
+    const port = Number((req.body && req.body.port) || process.env.DS_ROS_PORT || 9090);
+    const ok = await _rosPublish("/deepstream/snapshot/start", {}, host, port);
+    res.json({ ok });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/ros/snapshot/stop", async (req, res) => {
+  try {
+    const host = String((req.body && req.body.host) || process.env.DS_ROS_HOST || "127.0.0.1");
+    const port = Number((req.body && req.body.port) || process.env.DS_ROS_PORT || 9090);
+    const ok = await _rosPublish("/deepstream/snapshot/stop", {}, host, port);
+    res.json({ ok });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.post("/api/ros/snapshot/period_ms", async (req, res) => {
+  try {
+    const host = String((req.body && req.body.host) || process.env.DS_ROS_HOST || "127.0.0.1");
+    const port = Number((req.body && req.body.port) || process.env.DS_ROS_PORT || 9090);
+    const ms = Number((req.body && req.body.ms) || (req.body && req.body.period_ms) || 0);
+    const ok = await _rosPublish("/deepstream/snapshot/period_ms", { data: ms }, host, port);
+    res.json({ ok });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+app.get("/api/ros/bridge/health", async (_req, res) => {
+  try {
+    const host = String(process.env.DS_ROS_HOST || "127.0.0.1");
+    const port = Number(process.env.DS_ROS_PORT || 9090);
+    const ok = await _rosPublish("/__health", { ping: Date.now() }, host, port);
+    res.json({ ok, host, port });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.get("/api/configs/read", async (req, res) => {
   try {
     const p = String(req.query.path || "");
