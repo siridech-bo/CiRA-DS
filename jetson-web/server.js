@@ -1740,6 +1740,48 @@ app.get("/api/detections/latest", async (req, res) => {
   }
 });
 
+app.get("/sse/mqtt", async (req, res) => {
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    let closed = false;
+    req.on("close", () => { closed = true; });
+    const host = String(req.query.host || process.env.DS_MQTT_HOST || "127.0.0.1");
+    const port = Number(req.query.port || process.env.DS_MQTT_PORT || 1883);
+    const topic = String(req.query.topic || process.env.DS_MQTT_TOPIC || "deepstream/detections");
+    async function tick() {
+      if (closed) return;
+      try {
+        const py = [
+          "import os,time,json",
+          "import paho.mqtt.client as mqtt",
+          "h=os.getenv('DS_MQTT_HOST','"+host+"')",
+          "p=int(os.getenv('DS_MQTT_PORT','"+String(port)+"'))",
+          "t=os.getenv('DS_MQTT_TOPIC','"+topic+"')",
+          "buf=[]",
+          "def on_message(c,u,m):\n  buf.append(m.payload.decode('utf-8','ignore'))",
+          "cl=mqtt.Client()",
+          "try:\n  cl.connect(h,p,60); cl.subscribe(t,0); cl.on_message=on_message; cl.loop_start(); time.sleep(1); cl.loop_stop()\nexcept Exception as e:\n  pass",
+          "print('\n'.join(buf[-5:]))"
+        ].join("\n");
+        const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", `python3 - <<'PY'\n${py}\nPY` ] });
+        let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+        if (id) {
+          const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+          const text = Buffer.from(started.body || "", "binary").toString();
+          const lines = String(text || "").split(/\r?\n/).filter(Boolean);
+          for (const s of lines) { res.write(`data: ${s}\n\n`); }
+        }
+      } catch {}
+      setTimeout(tick, 1000);
+    }
+    tick();
+  } catch {
+    try { res.status(500).end(); } catch {}
+  }
+});
+
 app.get("/sse/detections", async (req, res) => {
   try {
     res.setHeader("Content-Type", "text/event-stream");
