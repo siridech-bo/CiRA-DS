@@ -12,6 +12,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import * as z from "zod/v4";
 import crypto from "crypto";
 import WebSocket from "ws";
+import mqtt from "mqtt";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1754,18 +1755,33 @@ app.get("/sse/mqtt", async (req, res) => {
       if (closed) return;
       try {
         const py = [
-          "import os,time,json",
+          "import os,time",
           "import paho.mqtt.client as mqtt",
-          "h=os.getenv('DS_MQTT_HOST','"+host+"')",
-          "p=int(os.getenv('DS_MQTT_PORT','"+String(port)+"'))",
-          "t=os.getenv('DS_MQTT_TOPIC','"+topic+"')",
+          "h=os.getenv('DS_MQTT_HOST','127.0.0.1')",
+          "p=int(os.getenv('DS_MQTT_PORT','1883'))",
+          "t=os.getenv('DS_MQTT_TOPIC','deepstream/detections')",
           "buf=[]",
-          "def on_message(c,u,m):\n  buf.append(m.payload.decode('utf-8','ignore'))",
+          "def on_message(c,u,m):",
+          "    try:",
+          "        s=m.payload.decode('utf-8','ignore')",
+          "        buf.append(s)",
+          "    except:",
+          "        pass",
           "cl=mqtt.Client()",
-          "try:\n  cl.connect(h,p,60); cl.subscribe(t,0); cl.on_message=on_message; cl.loop_start(); time.sleep(1); cl.loop_stop()\nexcept Exception as e:\n  pass",
-          "print('\n'.join(buf[-5:]))"
+          "try:",
+          "    cl.connect(h,p,60)",
+          "    cl.subscribe(t,0)",
+          "    cl.on_message=on_message",
+          "    cl.loop_start()",
+          "    time.sleep(1)",
+          "    cl.loop_stop()",
+          "except Exception as e:",
+          "    pass",
+          "for s in buf[-5:]:",
+          "    print(s)"
         ].join("\n");
-        const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", `python3 - <<'PY'\n${py}\nPY` ] });
+        const envAssign = `DS_MQTT_HOST=${host} DS_MQTT_PORT=${String(port)} DS_MQTT_TOPIC=${topic}`;
+        const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", `${envAssign} python3 - <<'PY'\n${py}\nPY` ] });
         let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
         if (id) {
           const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
@@ -1777,6 +1793,26 @@ app.get("/sse/mqtt", async (req, res) => {
       setTimeout(tick, 1000);
     }
     tick();
+  } catch {
+    try { res.status(500).end(); } catch {}
+  }
+});
+
+app.get("/sse/mqtt-node", async (req, res) => {
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    const host = String(req.query.host || process.env.DS_MQTT_HOST || "127.0.0.1");
+    const port = Number(req.query.port || process.env.DS_MQTT_PORT || 1883);
+    const topic = String(req.query.topic || process.env.DS_MQTT_TOPIC || "deepstream/detections");
+    const url = `mqtt://${host}:${String(port)}`;
+    const client = mqtt.connect(url, { reconnectPeriod: 0 });
+    let open = true;
+    req.on("close", () => { open = false; try { client.end(true); } catch {} });
+    client.on("connect", () => { try { client.subscribe(topic, { qos: 0 }); } catch {} });
+    client.on("message", (_t, payload) => { if (!open) return; try { const s = payload ? payload.toString("utf8") : ""; if (s) res.write(`data: ${s}\n\n`); } catch {} });
+    client.on("error", (e) => { if (!open) return; try { res.write(`event: status\ndata: {"error":"${String(e && e.message || e)}"}\n\n`); } catch {} });
   } catch {
     try { res.status(500).end(); } catch {}
   }
