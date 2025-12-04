@@ -17,6 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('etag', false);
 const PORT = process.env.PORT || 3000; // fallback for local runs; compose sets PORT=3000
 console.log("Starting Jetson Web backend, node=" + process.version + ", PORT=" + PORT);
 function isJetsonHost() {
@@ -1016,16 +1017,17 @@ app.get("/api/dsapp/samples", (_req, res) => {
       parts.push("pip3 install --no-cache-dir cuda-python || echo CUDA_PY_FAILED");
       parts.push("python3 -c \"import cuda; import sys; print('CUDA_PY_OK', getattr(cuda,'__version__','?'))\"");
       parts.push("TRIES=15; OK=0; for i in $(seq 1 $TRIES); do python3 -c \"import sys; import pyds; print('PYDS_OK', getattr(pyds,'__file__','?'))\" && OK=1 && break || true; echo \"PYDS_RETRY $i\"; sleep 1; done; if [ \"$OK\" = \"0\" ]; then python3 -c \"import sys; print('PYDS_ERR','No module named pyds')\"; fi; echo DONE $OK");
-    const cmd = parts.join(" && ") + " && tail -f /dev/null";
-    const binds = [
-      `${MEDIA_DIR}:${MEDIA_DIR}`,
-      `${CONFIGS_DIR}:${CONFIGS_DIR}`,
-      "/data/ds/configs:/data/ds/configs",
-      "/data/weight_config:/data/weight_config",
-      "/app/configs:/host_app_configs",
-      "/data/hls:/app/public/video",
-      "/data/ds/share:/app/share"
-    ];
+  const cmd = parts.join(" && ") + " && tail -f /dev/null";
+  const binds = [
+    `${MEDIA_DIR}:${MEDIA_DIR}`,
+    `${CONFIGS_DIR}:${CONFIGS_DIR}`,
+    "/data/ds/configs:/data/ds/configs",
+    "/data/weight_config:/data/weight_config",
+    "/app/configs:/host_app_configs",
+    "/data/hls:/app/public/video",
+    "/data/ds/share:/app/share",
+    "/data/ds/datasets:/data/ds/datasets"
+  ];
     const env = [
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
       "CUDA_VER=10.2",
@@ -1352,7 +1354,8 @@ app.post("/api/dspython/start_example", async (req, res) => {
       "/data/hls:/app/public/video",
       "/data/ds/apps/deepstream_python_apps:/opt/nvidia/deepstream/deepstream-6.0/sources/deepstream_python_apps",
       "/data/ds/apps/pyds_ext:/workspace/pyds_ext",
-      "/data/ds/share:/app/share"
+      "/data/ds/share:/app/share",
+      "/data/ds/datasets:/data/ds/datasets"
     ];
     const env = [
       `DISPLAY=${process.env.DISPLAY || ":0"}`,
@@ -1630,7 +1633,8 @@ app.post("/api/dsapp/start", async (req, res) => {
     "/data/weight_config:/data/weight_config",
     "/app/configs:/host_app_configs",
     "/data/hls:/app/public/video",
-    "/data/videos:/data/videos"
+    "/data/videos:/data/videos",
+    "/data/ds/datasets:/data/ds/datasets"
   ];
   try {
     const libDir = "/opt/nvidia/deepstream/deepstream-6.0/sources/libs/nvdsinfer_custom_impl";
@@ -1711,6 +1715,28 @@ app.get("/api/dsapp/logs/search", async (req, res) => {
     res.type("text/plain").send(out);
   } catch (e) {
     res.status(500).type("text/plain").send(String(e.message || e));
+  }
+});
+
+app.get("/api/detections/latest", async (req, res) => {
+  try {
+    const tail = Math.max(1, Math.min(Number(req.query.tail || 200), 5000));
+    const info = await dockerRequest("GET", "/containers/ds_usb_dev/json");
+    let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+    if (!running) return res.status(400).json({ error: "ds_usb_dev not running" });
+    const cmd = `tail -n ${String(tail)} /tmp/ds_usb_dev_app.log | awk '/^JSON_DET:/{sub(/^JSON_DET:/,"\");print}'`;
+    const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] });
+    if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
+    let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+    if (!id) return res.status(500).json({ error: "exec_id_missing", detail: created.body });
+    const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+    if (!(started.statusCode >= 200 && started.statusCode < 300)) return res.status(500).json({ error: "exec_start_failed", detail: started.body });
+    const text = Buffer.from(started.body || "", "binary").toString();
+    const items = [];
+    try { text.split(/\r?\n/).forEach(l => { const s = String(l || "").trim(); if (!s) return; try { items.push(JSON.parse(s)); } catch {} }); } catch {}
+    res.json({ items });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
   }
 });
 

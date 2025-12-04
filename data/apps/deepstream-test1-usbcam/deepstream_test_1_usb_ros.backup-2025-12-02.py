@@ -26,7 +26,6 @@ import time
 import threading
 sys.path.insert(0, '/data/ds')
 sys.path.insert(0, '/data/ds/common')
-sys.path.insert(0, '/opt/nvidia/deepstream/deepstream/lib/python')
 import os
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst
@@ -44,13 +43,12 @@ except Exception:
             return True
     platform_info = _PI()
 from common.bus_call import bus_call
-from common.utils import long_to_uint64
 
 try:
-    import pyds_ext as pyds
+    import pyds as pyds
 except Exception:
     try:
-        import pyds as pyds
+        import pyds_ext as pyds
     except Exception:
         pyds = None
 
@@ -58,71 +56,25 @@ try:
     import roslibpy
 except Exception:
     roslibpy = None
-try:
-    import paho.mqtt.client as mqtt
-except Exception:
-    mqtt = None
 
 PGIE_CLASS_ID_VEHICLE = 0
 PGIE_CLASS_ID_BICYCLE = 1
 PGIE_CLASS_ID_PERSON = 2
 PGIE_CLASS_ID_ROADSIGN = 3
 MUXER_BATCH_TIMEOUT_USEC = 33000
-MAX_TIME_STAMP_LEN = 32
 
 det_buf = {"frame": 0, "dets": []}
 det_pub = None
-mqtt_client = None
-def _mqtt_publish(topic, payload):
-    if mqtt_client is None:
-        return
-    try:
-        mqtt_client.publish(topic, payload, qos=0, retain=False)
-    except Exception:
-        pass
-def _mqtt_heartbeat_start():
-    if mqtt_client is None:
-        return
-    topic = os.getenv('DS_MQTT_TOPIC', 'deepstream/detections')
-    stop_flag = {'v': False}
-    def _run():
-        import json
-        while not stop_flag['v']:
-            try:
-                _mqtt_publish(topic, json.dumps({'type':'heartbeat','ts':int(time.time()*1000)}))
-            except Exception:
-                pass
-            time.sleep(1)
-    try:
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
-    except Exception:
-        pass
 snap_state = {"base": None, "deadline": 0, "meta": "", "meta_saved": False, "saved_kinds": set()}
 
 def _publish_detections(frame_num, dets):
     det_buf["frame"] = int(frame_num)
     det_buf["dets"] = dets
+    if det_pub is None:
+        return
     payload = {"frame": det_buf["frame"], "detections": det_buf["dets"]}
     try:
         det_pub.publish(roslibpy.Message({"data": __import__("json").dumps(payload)}))
-    except Exception:
-        pass
-    try:
-        j = __import__("json").dumps(payload)
-        print(j, flush=True)
-        print("JSON_DET:" + j, flush=True)
-        if mqtt_client is not None:
-            try:
-                mqtt_client.publish(os.getenv('DS_MQTT_TOPIC', 'deepstream/detections'), j, qos=0, retain=False)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    try:
-        line = __import__("json").dumps(payload) + "\n"
-        with open("/tmp/ds_usb_detections.jsonl", "a") as f:
-            f.write(line)
     except Exception:
         pass
 
@@ -135,6 +87,7 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
         PGIE_CLASS_ID_ROADSIGN:0
     }
     num_rects=0
+    dets=[]
     if pyds is None:
         return Gst.PadProbeReturn.OK
 
@@ -153,7 +106,6 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
 
         frame_number=frame_meta.frame_num
         num_rects = frame_meta.num_obj_meta
-        dets = []
         l_obj=frame_meta.obj_meta_list
         while l_obj is not None:
             try:
@@ -167,70 +119,6 @@ def osd_sink_pad_buffer_probe(pad,info,u_data):
                 l_obj=l_obj.next
             except StopIteration:
                 break
-
-        try:
-            is_first_object = True
-            l_obj=frame_meta.obj_meta_list
-            while l_obj is not None:
-                try:
-                    obj_meta=pyds.NvDsObjectMeta.cast(l_obj.data)
-                except StopIteration:
-                    break
-                if is_first_object and (frame_number % 30) == 0:
-                    user_event_meta = pyds.nvds_acquire_user_meta_from_pool(batch_meta)
-                    if user_event_meta:
-                        msg_meta = pyds.alloc_nvds_event_msg_meta(user_event_meta)
-                        msg_meta.bbox.top = obj_meta.rect_params.top
-                        msg_meta.bbox.left = obj_meta.rect_params.left
-                        msg_meta.bbox.width = obj_meta.rect_params.width
-                        msg_meta.bbox.height = obj_meta.rect_params.height
-                        msg_meta.frameId = frame_number
-                        msg_meta.trackingId = long_to_uint64(obj_meta.object_id)
-                        msg_meta.confidence = obj_meta.confidence
-                        meta = pyds.NvDsEventMsgMeta.cast(msg_meta)
-                        meta.sensorId = 0
-                        meta.placeId = 0
-                        meta.moduleId = 0
-                        meta.sensorStr = "sensor-0"
-                        meta.ts = pyds.alloc_buffer(MAX_TIME_STAMP_LEN + 1)
-                        pyds.generate_ts_rfc3339(meta.ts, MAX_TIME_STAMP_LEN)
-                        if obj_meta.class_id == PGIE_CLASS_ID_VEHICLE:
-                            meta.type = pyds.NvDsEventType.NVDS_EVENT_MOVING
-                            meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
-                            meta.objClassId = PGIE_CLASS_ID_VEHICLE
-                            obj = pyds.alloc_nvds_vehicle_object()
-                            vobj = pyds.NvDsVehicleObject.cast(obj)
-                            vobj.type = "sedan"
-                            vobj.color = "blue"
-                            vobj.make = "Bugatti"
-                            vobj.model = "M"
-                            vobj.license = "XX1234"
-                            vobj.region = "CA"
-                            meta.extMsg = vobj
-                            meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
-                        elif obj_meta.class_id == PGIE_CLASS_ID_PERSON:
-                            meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
-                            meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_PERSON
-                            meta.objClassId = PGIE_CLASS_ID_PERSON
-                            obj = pyds.alloc_nvds_person_object()
-                            pobj = pyds.NvDsPersonObject.cast(obj)
-                            pobj.age = 45
-                            pobj.cap = "none"
-                            pobj.hair = "black"
-                            pobj.gender = "male"
-                            pobj.apparel = "formal"
-                            meta.extMsg = pobj
-                            meta.extMsgSize = sys.getsizeof(pyds.NvDsPersonObject)
-                        user_event_meta.user_meta_data = meta
-                        user_event_meta.base_meta.meta_type = pyds.NvDsMetaType.NVDS_EVENT_MSG_META
-                        pyds.nvds_add_user_meta_to_frame(frame_meta, user_event_meta)
-                    is_first_object = False
-                try:
-                    l_obj=l_obj.next
-                except StopIteration:
-                    break
-        except Exception:
-            pass
 
         display_meta=pyds.nvds_acquire_display_meta_from_pool(batch_meta)
         display_meta.num_labels = 1
@@ -385,24 +273,18 @@ def main(args):
     try:
         nvosd.set_property('process-mode', 0)
         nvosd.set_property('display-text', 1)
-        nvosd.set_property('display-bbox', 1)
-        nvosd.set_property('border-width', 3)
     except Exception:
         pass
 
-    use_egl = os.getenv('DS_USE_EGL', '0') == '1'
-    if use_egl:
-        sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+    if platform_info.is_integrated_gpu():
+        sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
+        if not sink:
+            sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
     else:
-        if platform_info.is_integrated_gpu():
-            sink = Gst.ElementFactory.make("nv3dsink", "nv3d-sink")
-            if not sink:
-                sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+        if platform_info.is_platform_aarch64():
+            sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
         else:
-            if platform_info.is_platform_aarch64():
-                sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
-            else:
-                sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+            sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
     if not sink:
         sys.stderr.write(" Unable to create display sink \n")
 
@@ -410,7 +292,7 @@ def main(args):
     cam_caps = os.getenv('DS_CAM_CAPS', 'video/x-raw')
     out_mode = os.getenv('DS_OUTPUT_MODE', 'display').strip().lower()
     enable_display = (out_mode == 'display')
-    enable_caption = (out_mode == 'ros_caption') or (os.getenv('DS_ENABLE_CAPTION', '0') == '1') or (int(os.getenv('DS_SNAPSHOT_PERIOD_MS', '0') or '0') > 0)
+    enable_caption = (out_mode == 'ros_caption')
     cam_w = int(os.getenv('DS_CAM_WIDTH', '1280'))
     cam_h = int(os.getenv('DS_CAM_HEIGHT', '720'))
     cam_fps = os.getenv('DS_CAM_FPS', '30/1')
@@ -526,14 +408,6 @@ def main(args):
     pipeline.add(enc_osd)
     pipeline.add(q_post_display)
     pipeline.add(sink_osd)
-    enable_msg = os.getenv('DS_ENABLE_MSG', '1') != '0'
-    if enable_msg:
-        msgconv = Gst.ElementFactory.make("nvmsgconv", "nvmsg-converter")
-        msgbroker = Gst.ElementFactory.make("nvmsgbroker", "nvmsg-broker")
-        q_post_msg = Gst.ElementFactory.make("queue", "q_post_msg")
-        pipeline.add(q_post_msg)
-        pipeline.add(msgconv)
-        pipeline.add(msgbroker)
 
     print("Linking elements in the Pipeline \n")
     source.link(caps_v4l2src)
@@ -558,40 +432,20 @@ def main(args):
     else:
         streammux.link(nvvidconv)
     nvvidconv.link(caps_rgba)
-    caps_rgba.link(tee_presave)
-    tp_src1 = tee_presave.get_request_pad('src_%u')
-    tp_sink1 = q_pre_osd.get_static_pad('sink')
-    tp_src1.link(tp_sink1)
+    caps_rgba.link(q_pre_osd)
     q_pre_osd.link(nvosd)
-    tp_src2 = tee_presave.get_request_pad('src_%u')
-    tp_sink2 = conv_clean.get_static_pad('sink')
-    tp_src2.link(tp_sink2)
-    conv_clean.link(caps_clean)
-    caps_clean.link(enc_clean)
-    enc_clean.link(sink_clean)
-
-    nvosd.link(tee_postosd)
-    tpo_src1 = tee_postosd.get_request_pad('src_%u')
-    tpo_sink1 = q_post_display.get_static_pad('sink')
-    tpo_src1.link(tpo_sink1)
-    if sink.get_name() == "nv3d-sink":
-        q_post_display.link(sink)
+    if enable_display:
+        nvosd.link(q_post_display)
+        if sink.get_name() == "nv3d-sink":
+            q_post_display.link(sink)
+        else:
+            q_post_display.link(egltransform)
+            egltransform.link(sink)
     else:
-        q_post_display.link(egltransform)
-        egltransform.link(sink)
-    tpo_src2 = tee_postosd.get_request_pad('src_%u')
-    tpo_sink2 = conv_osd.get_static_pad('sink')
-    tpo_src2.link(tpo_sink2)
-    conv_osd.link(caps_osd)
-    caps_osd.link(enc_osd)
-    enc_osd.link(sink_osd)
-
-    if enable_msg:
-        tpo_src3 = tee_postosd.get_request_pad('src_%u')
-        tpo_sink3 = q_post_msg.get_static_pad('sink')
-        tpo_src3.link(tpo_sink3)
-        q_post_msg.link(msgconv)
-        msgconv.link(msgbroker)
+        nvosd.link(conv_osd)
+        conv_osd.link(caps_osd)
+        caps_osd.link(enc_osd)
+        enc_osd.link(sink_osd)
 
     def _on_new_sample(sink, kind):
         global snap_state
@@ -606,11 +460,6 @@ def main(args):
         buf.unmap(mapinfo)
         ts_ms = int(time.time()*1000)
         meta_json = __import__("json").dumps({"frame": det_buf["frame"], "detections": det_buf["dets"]})
-        try:
-            print(meta_json, flush=True)
-            print("JSON_DET:" + meta_json, flush=True)
-        except Exception:
-            pass
         triggered = _should_snap()
         if triggered:
             snap_state["base"] = str(int(last_snap["ts"]))
@@ -639,12 +488,6 @@ def main(args):
         return _on_new_sample(sink, "osd")
     if enable_caption:
         sink_osd.connect("new-sample", _osd_cb)
-        try:
-            def _clean_cb_bridge(sink):
-                return _on_new_sample(sink, "clean")
-            sink_clean.connect("new-sample", _clean_cb_bridge)
-        except Exception:
-            pass
 
     loop = GLib.MainLoop()
     bus = pipeline.get_bus()
@@ -674,33 +517,6 @@ def main(args):
             sub_start.subscribe(lambda msg: _on_start(None))
             sub_stop.subscribe(lambda msg: _on_stop(None))
             sub_period.subscribe(lambda msg: _on_period(type('M', (), {'data': msg.get('data', 0)})()))
-        except Exception:
-            pass
-    global mqtt_client
-    if mqtt is not None and os.getenv('DS_ENABLE_MSG', '1') == '0':
-        try:
-            host = os.getenv('DS_MQTT_HOST', '127.0.0.1')
-            port = int(os.getenv('DS_MQTT_PORT', '1883'))
-            client = mqtt.Client()
-            client.connect(host, port, 60)
-            client.loop_start()
-            mqtt_client = client
-            _mqtt_heartbeat_start()
-        except Exception:
-            mqtt_client = None
-    if enable_msg:
-        mcfg = os.getenv('DS_MSGCONV_CONFIG', '/app/share/dstest4_msgconv_config.txt')
-        pload = int(os.getenv('DS_MSGCONV_PAYLOAD_TYPE', '0'))
-        proto_lib = os.getenv('DS_MQTT_PROTO_LIB', '/opt/nvidia/deepstream/deepstream-6.0/lib/libnvds_mqtt_proto.so')
-        conn_str = os.getenv('DS_MQTT_CONN_STR', '127.0.0.1;1883')
-        topic = os.getenv('DS_MQTT_TOPIC', 'deepstream/detections')
-        try:
-            msgconv.set_property('config', mcfg)
-            msgconv.set_property('payload-type', pload)
-            msgbroker.set_property('proto-lib', proto_lib)
-            msgbroker.set_property('conn-str', conn_str)
-            msgbroker.set_property('topic', topic)
-            msgbroker.set_property('sync', False)
         except Exception:
             pass
     pipeline.set_state(Gst.State.PLAYING)

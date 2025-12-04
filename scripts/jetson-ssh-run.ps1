@@ -5,15 +5,26 @@ param(
   [int]$SnapshotPeriodMs = 20000,
   [string]$RosDistro = "melodic",
   [int]$RosBridgePort = 9090,
-  [string]$RosBridgeHost = "127.0.0.1"
+  [string]$RosBridgeHost = "127.0.0.1",
+  [string]$SshAlias = "jetson",
+  [string]$SshConfigPath = "$env:USERPROFILE\.ssh\config"
 )
 
 $localShare = (Resolve-Path -LiteralPath "data/apps/deepstream-test1-usbcam/deepstream_test_1_usb_ros.py").Path
 $localCommon = (Resolve-Path -LiteralPath "data/apps/common").Path
+$localMsgConvCfg = (Resolve-Path -LiteralPath "data/apps/deepstream-test4/dstest4_msgconv_config.txt").Path
 
-$scpBaseArgs = @('scp','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=/dev/null')
-& $scpBaseArgs $localShare ($JetsonUser + '@' + $JetsonHost + ':/data/ds/share/') | ForEach-Object { $_ }
-& $scpBaseArgs '-r' $localCommon ($JetsonUser + '@' + $JetsonHost + ':/data/ds/common/') | ForEach-Object { $_ }
+try {
+  $scp = Get-Command scp -ErrorAction SilentlyContinue
+  if ($scp) {
+    $scpBaseArgs = @('scp','-F',$SshConfigPath,'-o','BatchMode=yes')
+    & $scpBaseArgs $localShare ($SshAlias + ':/data/ds/share/') | ForEach-Object { $_ }
+    & $scpBaseArgs '-r' $localCommon ($SshAlias + ':/data/ds/common/') | ForEach-Object { $_ }
+    & $scpBaseArgs $localMsgConvCfg ($SshAlias + ':/data/ds/share/') | ForEach-Object { $_ }
+  } else {
+    Write-Output '[WARN] scp not found, skipping file copy'
+  }
+} catch { Write-Output ('[WARN] scp failed: ' + $_) }
 
 $remoteCmds = @(
   'set -e',
@@ -24,6 +35,9 @@ $remoteCmds = @(
   'sudo mkdir -p /data/ds/datasets/autocap',
   'sudo chown ${USER}:${USER} /data/ds/datasets/autocap || true',
   'docker rm -f ds_usb_dev || true',
+  'docker rm -f mosq || true',
+  'docker pull eclipse-mosquitto:2',
+  'docker run -d --name mosq --network host eclipse-mosquitto:2',
   (
     'docker run -d --name ds_usb_dev --runtime nvidia --network host --privileged ' +
     '-e DISPLAY=:0 -e PYTHONPATH=/app:/app/common ' +
@@ -40,6 +54,10 @@ $remoteCmds = @(
   (
     'docker exec ds_usb_dev /usr/bin/env DISPLAY=:0 PYTHONPATH=/app:/app/common ' +
     'DS_PGIE_CONFIG=/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/config_infer_primary.txt ' +
+    'DS_MSGCONV_CONFIG=/app/share/dstest4_msgconv_config.txt ' +
+    'DS_MQTT_PROTO_LIB=/opt/nvidia/deepstream/deepstream/lib/libnvds_mqtt_proto.so ' +
+    'DS_MQTT_CONN_STR=127.0.0.1;1883 ' +
+    'DS_MQTT_TOPIC=deepstream/detections ' +
     ('DS_ROS_HOST=' + $RosBridgeHost + ' ') +
     ('DS_ROS_PORT=' + $RosBridgePort + ' ') +
     ('python3 /app/share/deepstream_test_1_usb_ros.py ' + $Device + ' ') +
@@ -57,13 +75,12 @@ $remoteCmds = @(
 )
 
 $joined = ($remoteCmds -join ' && ')
+$escaped = $joined.Replace('"','\"')
 
 $sshCmd = @(
-  'ssh',
-  '-o', 'StrictHostKeyChecking=no',
-  '-o', 'UserKnownHostsFile=/dev/null',
-  ($JetsonUser + '@' + $JetsonHost),
-  ('bash -lc ' + "'" + $joined.Replace("'", "'\"'\"'") + "'")
+  'ssh','-F',$SshConfigPath,'-o','BatchMode=yes',
+  $SshAlias,
+  ('bash -lc "' + $escaped + '"')
 )
 
 Write-Output ("[INFO] Connecting to {0}@{1} and running workflow..." -f $JetsonUser, $JetsonHost)
