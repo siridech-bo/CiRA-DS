@@ -1724,7 +1724,7 @@ app.get("/api/detections/latest", async (req, res) => {
     const info = await dockerRequest("GET", "/containers/ds_usb_dev/json");
     let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
     if (!running) return res.status(400).json({ error: "ds_usb_dev not running" });
-    const cmd = `tail -n ${String(tail)} /tmp/ds_usb_dev_app.log | awk '/^JSON_DET:/{sub(/^JSON_DET:/,"\");print}'`;
+    const cmd = `awk '/^JSON_DET:/{sub(/^JSON_DET:/,\"\");print}/^\\s*\{/{print}' /tmp/ds_usb_dev_app.log | tail -n ${String(tail)}`;
     const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] });
     if (!(created.statusCode >= 200 && created.statusCode < 300)) return res.status(500).json({ error: "exec_create_failed", detail: created.body });
     let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
