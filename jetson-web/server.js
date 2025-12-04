@@ -1740,6 +1740,42 @@ app.get("/api/detections/latest", async (req, res) => {
   }
 });
 
+app.get("/sse/detections", async (req, res) => {
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    let closed = false;
+    req.on("close", () => { closed = true; });
+    let last = "";
+    async function tick() {
+      if (closed) return;
+      try {
+        const tail = Math.max(1, Math.min(Number(req.query.tail || 50), 2000));
+        const info = await dockerRequest("GET", "/containers/ds_usb_dev/json");
+        let running = false; try { const st = JSON.parse(info.body || "{}").State || null; running = !!(st && st.Running); } catch {}
+        if (!running) { res.write(`event: status\ndata: {\"error\":\"ds_usb_dev not running\"}\n\n`); setTimeout(tick, 1000); return; }
+        const cmd = `awk '/^JSON_DET:/{sub(/^JSON_DET:/,\"\");print}/^\\s*\{/{print}' /tmp/ds_usb_dev_app.log | tail -n ${String(tail)}`;
+        const created = await dockerRequest("POST", "/containers/ds_usb_dev/exec", { AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ["bash","-lc", cmd] });
+        let id = ""; try { id = JSON.parse(created.body || "{}").Id || ""; } catch {}
+        if (!id) { res.write(`event: status\ndata: {\"error\":\"exec_id_missing\"}\n\n`); setTimeout(tick, 1000); return; }
+        const started = await dockerRequest("POST", `/exec/${id}/start`, { Detach: false, Tty: true });
+        const text = Buffer.from(started.body || "", "binary").toString();
+        const lines = String(text || "").split(/\r?\n/).filter(Boolean);
+        for (const l of lines.slice(-5)) {
+          const s = l.trim();
+          if (!s || s === last) continue;
+          try { const obj = JSON.parse(s); res.write(`data: ${JSON.stringify(obj)}\n\n`); last = s; } catch {}
+        }
+      } catch {}
+      setTimeout(tick, 1000);
+    }
+    tick();
+  } catch (e) {
+    try { res.status(500).end(); } catch {}
+  }
+});
+
 app.get("/api/configs/read", async (req, res) => {
   try {
     const p = String(req.query.path || "");
