@@ -1810,7 +1810,7 @@ app.get("/sse/mqtt-node", async (req, res) => {
     const client = mqtt.connect(url, { reconnectPeriod: 0 });
     let open = true;
     req.on("close", () => { open = false; try { client.end(true); } catch {} });
-    client.on("connect", () => { try { client.subscribe(topic, { qos: 0 }); } catch {} });
+    client.on("connect", () => { try { res.write(`event: status\ndata: {"status":"connected"}\n\n`); client.subscribe(topic, { qos: 0 }); } catch {} });
     client.on("message", (_t, payload) => { if (!open) return; try { const s = payload ? payload.toString("utf8") : ""; if (s) res.write(`data: ${s}\n\n`); } catch {} });
     client.on("error", (e) => { if (!open) return; try { res.write(`event: status\ndata: {"error":"${String(e && e.message || e)}"}\n\n`); } catch {} });
   } catch {
