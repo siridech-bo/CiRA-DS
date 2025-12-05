@@ -149,7 +149,43 @@ function dockerRequest(method, reqPath, body, headers) {
   });
 }
 
-const DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "siridech2/deepstream-l4t:pyds-dev";
+let DS_IMAGE = process.env.DEEPSTREAM_IMAGE || "siridech2/deepstream-l4t:pyds-dev";
+let DS_IMAGE_PINNED = null;
+async function resolveDeepstreamImageDigest() {
+  try {
+    const envDigest = String(process.env.DEEPSTREAM_IMAGE_DIGEST || "").trim();
+    if (envDigest && /^sha256:[0-9a-fA-F]{64}$/.test(envDigest)) {
+      const repo = DS_IMAGE.includes("@sha256:") ? DS_IMAGE.split("@")[0] : DS_IMAGE.split(":")[0];
+      DS_IMAGE_PINNED = `${repo}@${envDigest}`;
+      return DS_IMAGE_PINNED;
+    }
+    if (DS_IMAGE.includes("@sha256:")) { DS_IMAGE_PINNED = DS_IMAGE; return DS_IMAGE_PINNED; }
+    let info = await dockerRequest("GET", `/images/${encodeURIComponent(DS_IMAGE)}/json`);
+    try {
+      if (info.statusCode >= 200 && info.statusCode < 300) {
+        const j = JSON.parse(info.body || "{}");
+        const digests = Array.isArray(j.RepoDigests) ? j.RepoDigests : [];
+        const baseRepo = DS_IMAGE.split(":")[0];
+        const preferred = digests.find((d) => d.startsWith(baseRepo + "@sha256:")) || digests[0];
+        if (preferred) { DS_IMAGE_PINNED = preferred; }
+      }
+    } catch {}
+    if (!DS_IMAGE_PINNED) {
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(DS_IMAGE)}`);
+      info = await dockerRequest("GET", `/images/${encodeURIComponent(DS_IMAGE)}/json`);
+      try {
+        const j = JSON.parse(info.body || "{}");
+        const digests = Array.isArray(j.RepoDigests) ? j.RepoDigests : [];
+        const baseRepo = DS_IMAGE.split(":")[0];
+        const preferred = digests.find((d) => d.startsWith(baseRepo + "@sha256:")) || digests[0];
+        if (preferred) { DS_IMAGE_PINNED = preferred; }
+      } catch {}
+    }
+    return DS_IMAGE_PINNED || DS_IMAGE;
+  } catch { return DS_IMAGE_PINNED || DS_IMAGE; }
+}
+function _getDsImage() { return DS_IMAGE_PINNED || DS_IMAGE; }
+try { resolveDeepstreamImageDigest().then(() => { try { console.log(`DeepStream image pinned: ${_getDsImage()}`); } catch {} }); } catch {}
 const SNAP_DIR = process.env.SNAP_DIR || "/data/snapshots";
 const CONFIGS_DIR = process.env.CONFIGS_DIR || "/app/configs/";
 const MEDIA_DIR = process.env.MEDIA_DIR || "/data/videos";
@@ -213,7 +249,7 @@ app.post("/api/snapshot/start", async (req, res) => {
   if (!isRtsp) { try { const dir = path.dirname(uri); binds.push(`${dir}:${dir}`); } catch {} }
   let ok = false, used = "";
   for (const c of cmds) {
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
+    const body = { Image: _getDsImage(), Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Runtime: "nvidia", Binds: binds } };
     await dockerRequest("DELETE", "/containers/ds_snapshot?force=true");
     const created = await dockerRequest("POST", "/containers/create?name=ds_snapshot", body);
     if (created.statusCode < 200 || created.statusCode >= 300) continue;
@@ -359,7 +395,7 @@ app.post("/api/hls/start", async (req, res) => {
       cmds.push(`gst-launch-1.0 -vv filesrc location='${uri}' ! matroskademux ! h264parse config-interval=-1 ! mpegtsmux ! ${baseSink}`);
     }
     for (const c of cmds) {
-      const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Binds: binds } };
+      const body = { Image: _getDsImage(), Entrypoint: ["bash"], Cmd: ["-lc", c], HostConfig: { NetworkMode: "host", Binds: binds } };
       await dockerRequest("DELETE", "/containers/ds_hls?force=true");
       const created2 = await dockerRequest("POST", "/containers/create?name=ds_hls", body);
       if (created2.statusCode < 200 || created2.statusCode >= 300) continue;
@@ -658,7 +694,7 @@ app.get("/api/admin/env", (_req, res) => {
     JETSON_ONLY,
     IS_JETSON: String(process.env.IS_JETSON || "false").toLowerCase() === "true",
     MEDIA_DIR,
-    DS_IMAGE,
+    DS_IMAGE: _getDsImage(),
     DOCKER_HOST_HTTP
   });
 });
@@ -667,7 +703,7 @@ app.post("/api/debug/run", async (req, res) => {
   try {
     const cmd = String((req.body && req.body.cmd) || "").trim();
     if (!cmd) return res.status(400).json({ error: "cmd required" });
-    const image = String((req.body && req.body.image) || DS_IMAGE);
+    const image = String((req.body && req.body.image) || _getDsImage());
     const waitMs = Math.max(0, Math.min(1800000, Number((req.body && req.body.wait_ms) || 180000)));
     const binds = [
       `${MEDIA_DIR}:${MEDIA_DIR}`,
@@ -936,7 +972,7 @@ app.get("/api/terminal/health", (_req, res) => {
   res.json({ ws: !!WebSocketServer, mode: TERM_MODE, endpoints: ["/ws/terminal", "/ws/terminal/container"] });
 });
 
-const DS_APP_IMAGE = process.env.DS_APP_IMAGE || DS_IMAGE;
+const DS_APP_IMAGE = process.env.DS_APP_IMAGE || _getDsImage();
 function buildSampleCmd(sample, uris) {
   const base = "/opt/nvidia/deepstream/deepstream-6.0";
   const bins = {
@@ -992,7 +1028,7 @@ app.get("/api/dsapp/samples", (_req, res) => {
       if (devBlocked() && !allowOverride) return res.status(403).json({ error: "blocked_on_dev" });
       const shouldInstall = !!(req.body && req.body.install);
       const useGit = !!(req.body && req.body.useGit);
-      const image = (req.body && req.body.image) || DS_IMAGE;
+      const image = (req.body && req.body.image) || _getDsImage();
       const parts = [];
       parts.push("DS_ROOT=$(ls -d /opt/nvidia/deepstream/deepstream-* | head -n 1)");
       parts.push("[ -f \"$DS_ROOT/setup-env.sh\" ] && source \"$DS_ROOT/setup-env.sh\" || true");
@@ -2000,10 +2036,10 @@ app.post("/api/mediamtx/save_host", async (req, res) => {
     await fs.promises.mkdir(path.dirname(tmp), { recursive: true });
     await fs.promises.writeFile(tmp, c, "utf8");
     await dockerRequest("DELETE", "/containers/mediamtx_write?force=true");
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", `cp -f ${tmp} ${p} && chmod 644 ${p} && echo OK`], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
+    const body = { Image: _getDsImage(), Entrypoint: ["bash"], Cmd: ["-lc", `cp -f ${tmp} ${p} && chmod 644 ${p} && echo OK`], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
     let created = await dockerRequest("POST", "/containers/create?name=mediamtx_write", body);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) {
-      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(DS_IMAGE)}`);
+      await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(_getDsImage())}`);
       await dockerRequest("DELETE", "/containers/mediamtx_write?force=true");
       created = await dockerRequest("POST", "/containers/create?name=mediamtx_write", body);
     }
@@ -2022,7 +2058,7 @@ app.post("/api/mediamtx/save_host", async (req, res) => {
 app.get("/api/mediamtx/read_host", async (_req, res) => {
   try {
     await dockerRequest("DELETE", "/containers/mediamtx_read?force=true");
-    const body = { Image: DS_IMAGE, Entrypoint: ["bash"], Cmd: ["-lc", "cat /data/mediamtx.yml"], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
+    const body = { Image: _getDsImage(), Entrypoint: ["bash"], Cmd: ["-lc", "cat /data/mediamtx.yml"], HostConfig: { NetworkMode: "host", Binds: ["/data:/data"] } };
     let created = await dockerRequest("POST", "/containers/create?name=mediamtx_read", body);
     if (!(created.statusCode >= 200 && created.statusCode < 300)) {
       await dockerRequest("POST", `/images/create?fromImage=${encodeURIComponent(DS_IMAGE)}`);

@@ -528,6 +528,25 @@ def main(args):
     pipeline.add(sink_osd)
     enable_msg = os.getenv('DS_ENABLE_MSG', '1') != '0'
     if enable_msg:
+        try:
+            proto_lib_path = os.getenv('DS_MQTT_PROTO_LIB', '/opt/nvidia/deepstream/deepstream-6.0/lib/libnvds_mqtt_proto.so')
+            dep_ok = False
+            exists_ok = False
+            try:
+                exists_ok = os.path.exists(proto_lib_path)
+            except Exception:
+                exists_ok = False
+            try:
+                import ctypes
+                ctypes.CDLL('libmosquitto.so.1')
+                dep_ok = True
+            except Exception:
+                dep_ok = False
+            if (not exists_ok) or (not dep_ok):
+                enable_msg = False
+        except Exception:
+            enable_msg = False
+    if enable_msg:
         msgconv = Gst.ElementFactory.make("nvmsgconv", "nvmsg-converter")
         msgbroker = Gst.ElementFactory.make("nvmsgbroker", "nvmsg-broker")
         q_post_msg = Gst.ElementFactory.make("queue", "q_post_msg")
@@ -677,7 +696,7 @@ def main(args):
         except Exception:
             pass
     global mqtt_client
-    if mqtt is not None and os.getenv('DS_ENABLE_MSG', '1') == '0':
+    if mqtt is not None and (not enable_msg):
         try:
             host = os.getenv('DS_MQTT_HOST', '127.0.0.1')
             port = int(os.getenv('DS_MQTT_PORT', '1883'))
