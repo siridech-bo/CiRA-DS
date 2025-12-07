@@ -224,6 +224,35 @@
       <div class="status" id="jsonLogs" style="white-space:pre-wrap"></div>
     </div>
     <div class="card">
+      <h2>Snapshot</h2>
+      <input id="snapUri" placeholder="rtsp://... or /data/videos/file.mp4" />
+      <input id="snapRate" type="number" placeholder="rate per second" />
+      <select id="mediaList" size="6" style="width:100%" onchange="selectMediaFile()"></select>
+      <div class="row">
+        <button onclick="listMedia()">List Media</button>
+        <button onclick="useVideoForSnap()">Use Video</button>
+        <button onclick="startSnap()">Start</button>
+        <button onclick="stopSnap()">Stop</button>
+        <button onclick="clearSnap()">Clear Images</button>
+        <button onclick="loadSnapLogs()">Logs</button>
+      </div>
+      <div class="status" id="snapStatus"></div>
+      <div class="status" id="snapCount"></div>
+      <div id="snapViewer" style="display:flex;flex-direction:column;gap:8px;align-items:center;">
+        <img id="snapImage" style="max-width:100%;height:auto;object-fit:contain" />
+        <div class="row" style="width:100%">
+          <button onclick="prevSnap()">Prev</button>
+          <div id="snapIndex" class="status" style="text-align:center"></div>
+          <button onclick="nextSnap()">Next</button>
+        </div>
+        <div class="row" style="width:100%">
+          <button onclick="startSnapMqtt()">Start Live Snap (MQTT)</button>
+          <button onclick="stopSnapMqtt()">Stop Live</button>
+        </div>
+        <div class="status" id="snapMqttStatus"></div>
+      </div>
+    </div>
+    <div class="card">
       <h2>Dataset Images</h2>
       <div class="row">
         <select id="autocapKind">
@@ -577,35 +606,6 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
       <div class="status" id="msgList" style="white-space:pre-wrap"></div>
     </div>
     <div class="card">
-      <h2>Snapshot</h2>
-      <input id="snapUri" placeholder="rtsp://... or /data/videos/file.mp4" />
-      <input id="snapRate" type="number" placeholder="rate per second" />
-      <select id="mediaList" size="6" style="width:100%" onchange="selectMediaFile()"></select>
-      <div class="row">
-        <button onclick="listMedia()">List Media</button>
-        <button onclick="useVideoForSnap()">Use Video</button>
-        <button onclick="startSnap()">Start</button>
-        <button onclick="stopSnap()">Stop</button>
-        <button onclick="clearSnap()">Clear Images</button>
-        <button onclick="loadSnapLogs()">Logs</button>
-      </div>
-      <div class="status" id="snapStatus"></div>
-      <div class="status" id="snapCount"></div>
-      <div id="snapViewer" style="display:flex;flex-direction:column;gap:8px;align-items:center;">
-        <img id="snapImage" style="max-width:100%;height:auto;object-fit:contain" />
-        <div class="row" style="width:100%">
-          <button onclick="prevSnap()">Prev</button>
-          <div id="snapIndex" class="status" style="text-align:center"></div>
-          <button onclick="nextSnap()">Next</button>
-        </div>
-        <div class="row" style="width:100%">
-          <button onclick="startSnapMqtt()">Start Live Snap (MQTT)</button>
-          <button onclick="stopSnapMqtt()">Stop Live</button>
-        </div>
-        <div class="status" id="snapMqttStatus"></div>
-      </div>
-    </div>
-    <div class="card">
       <h2>System Health</h2>
       <div class="row">
         <button onclick="localHealth()">Refresh</button>
@@ -856,14 +856,14 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
     async function startRtsp() { try { const r = await fetch('/api/rtsp/start', { method: 'POST' }); const j = await r.json(); document.getElementById('rtspStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
     async function stopRtsp() { try { const r = await fetch('/api/rtsp/stop', { method: 'POST' }); const j = await r.json(); document.getElementById('rtspStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
     async function logsRtsp() { try { const r = await fetch('/api/rtsp/logs'); const t = await r.text(); document.getElementById('rtspStatus').textContent = t; } catch (e) { document.getElementById('rtspStatus').textContent = e.message; } }
-    async function refreshJsonLogs() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const lines = t.split(/\r?\n/).filter(x => /\{.*\}/.test(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
-    async function refreshDetections() { try { const r = await fetch('/api/detections/latest?tail=600'); const j = await r.json(); const lines = (j.items||[]).slice(-200).map(x => JSON.stringify(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
+    async function refreshJsonLogs() { try { const r = await fetch('/api/dsapp/logs'); const t = await r.text(); const lines = t.split(/\r?\n/).filter(x => /\{.*\}/.test(x)).slice(-10); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
+    async function refreshDetections() { try { const r = await fetch('/api/detections/latest?tail=600'); const j = await r.json(); const lines = (j.items||[]).slice(-10).map(x => JSON.stringify(x)); document.getElementById('jsonLogs').textContent = lines.join('\n') || '(no json)'; } catch (e) { document.getElementById('jsonLogs').textContent = e.message; } }
     function startAutoJson() { try { if (window.jsonTimer) { clearInterval(window.jsonTimer); } refreshDetections(); window.jsonTimer = setInterval(refreshDetections, 1000); } catch {} }
     function stopAutoJson() { try { if (window.jsonTimer) { clearInterval(window.jsonTimer); window.jsonTimer = null; } } catch {} }
     function toggleJsonMonitor(on) { try { if (window.jsonTimer) { clearInterval(window.jsonTimer); window.jsonTimer = null; } if (on) { startAutoJson(); } } catch {} }
-    function startStreamJson() { try { if (window.esJson) { try { window.esJson.close(); } catch {} window.esJson = null; } const url = '/sse/detections?tail=50'; const es = new EventSource(url); window.esJson = es; es.onmessage = (ev) => { try { const el = document.getElementById('jsonLogs'); const lines = (el.textContent || '').split(/\r?\n/).filter(Boolean); lines.push(ev.data); el.textContent = lines.slice(-50).join('\n'); } catch {} }; es.onerror = () => { try { const el = document.getElementById('jsonLogs'); el.textContent = (el.textContent||'') + '\n(error)'; } catch {} }; } catch {} }
+    function startStreamJson() { try { if (window.esJson) { try { window.esJson.close(); } catch {} window.esJson = null; } const url = '/sse/detections?tail=50'; const es = new EventSource(url); window.esJson = es; es.onmessage = (ev) => { try { const el = document.getElementById('jsonLogs'); const lines = (el.textContent || '').split(/\r?\n/).filter(Boolean); lines.push(ev.data); el.textContent = lines.slice(-10).join('\n'); } catch {} }; es.onerror = () => { try { const el = document.getElementById('jsonLogs'); el.textContent = (el.textContent||'') + '\n(error)'; } catch {} }; } catch {} }
     function stopStreamJson() { try { if (window.esJson) { window.esJson.close(); window.esJson = null; } } catch {} }
-    function startMqttStream() { try { if (window.esMqtt) { try { window.esMqtt.close(); } catch {} window.esMqtt = null; } const host = '127.0.0.1'; const port = 1883; const topic = 'deepstream/detections'; const url = `/sse/mqtt?host=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}&topic=${encodeURIComponent(topic)}`; const es = new EventSource(url); window.esMqtt = es; es.onmessage = (ev) => { try { const el = document.getElementById('jsonLogs'); const lines = (el.textContent || '').split(/\r?\n/).filter(Boolean); lines.push(ev.data); el.textContent = lines.slice(-50).join('\n'); } catch {} }; es.onerror = () => { try { const el = document.getElementById('jsonLogs'); el.textContent = (el.textContent||'') + '\n(mqtt error)'; } catch {} }; } catch {} }
+    function startMqttStream() { try { if (window.esMqtt) { try { window.esMqtt.close(); } catch {} window.esMqtt = null; } const host = '127.0.0.1'; const port = 1883; const topic = 'deepstream/detections'; const url = `/sse/mqtt?host=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}&topic=${encodeURIComponent(topic)}`; const es = new EventSource(url); window.esMqtt = es; es.onmessage = (ev) => { try { const el = document.getElementById('jsonLogs'); const lines = (el.textContent || '').split(/\r?\n/).filter(Boolean); lines.push(ev.data); el.textContent = lines.slice(-10).join('\n'); } catch {} }; es.onerror = () => { try { const el = document.getElementById('jsonLogs'); el.textContent = (el.textContent||'') + '\n(mqtt error)'; } catch {} }; } catch {} }
     function stopMqttStream() { try { if (window.esMqtt) { window.esMqtt.close(); window.esMqtt = null; } } catch {} }
     async function refreshAutocap() { try { const kind = String(document.getElementById('autocapKind').value || 'any'); const r = await fetch('/api/autocap/list?kind=' + encodeURIComponent(kind) + '&limit=2000', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }); const j = await r.json(); window.autocapFiles = Array.isArray(j.files) ? j.files : []; window.autocapIndex = window.autocapFiles.length ? window.autocapFiles.length - 1 : 0; showAutocap(window.autocapIndex); } catch (e) { document.getElementById('autocapName').textContent = e.message; } }
     function showAutocap(i) { const files = window.autocapFiles || []; if (!files.length) { document.getElementById('autocapName').textContent = 'No images'; document.getElementById('autocapImage').src = ''; document.getElementById('autocapIndex').textContent = ''; return; } if (i < 0) i = 0; if (i >= files.length) i = files.length - 1; window.autocapIndex = i; const f = files[i]; document.getElementById('autocapImage').src = '/autocap/' + encodeURIComponent(f); document.getElementById('autocapName').textContent = f; document.getElementById('autocapIndex').textContent = String(i + 1) + ' / ' + String(files.length); }
