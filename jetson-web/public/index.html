@@ -598,6 +598,11 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
           <div id="snapIndex" class="status" style="text-align:center"></div>
           <button onclick="nextSnap()">Next</button>
         </div>
+        <div class="row" style="width:100%">
+          <button onclick="startSnapMqtt()">Start Live Snap (MQTT)</button>
+          <button onclick="stopSnapMqtt()">Stop Live</button>
+        </div>
+        <div class="status" id="snapMqttStatus"></div>
       </div>
     </div>
     <div class="card">
@@ -695,6 +700,8 @@ ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -c:v libx264 -tune zerolate
     }
     function prevSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + n - 1) % n; renderSnap(); }
     function nextSnap() { const n = (window.snapFiles || []).length; if (!n) return; window.snapIndex = (window.snapIndex + 1) % n; renderSnap(); }
+    function startSnapMqtt() { try { if (window.esSnap) { try { window.esSnap.close(); } catch {} window.esSnap = null; } const host = location.hostname || '127.0.0.1'; const port = 1883; const topic = 'deepstream/snap'; const url = `/sse/mqtt-node?host=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}&topic=${encodeURIComponent(topic)}`; const es = new EventSource(url); window.esSnap = es; const statusEl = document.getElementById('snapMqttStatus'); es.addEventListener('status', (ev) => { try { statusEl.textContent = ev.data || ''; } catch {} }); es.onmessage = (ev) => { try { const s = String(ev.data || ''); if (!s) return; const obj = JSON.parse(s); const b64 = String(obj.image_b64 || ''); if (b64) { const imgEl = document.getElementById('snapImage'); imgEl.src = 'data:image/jpeg;base64,' + b64; const idxEl = document.getElementById('snapIndex'); idxEl.textContent = 'live'; } } catch (e) { try { statusEl.textContent = 'parse_error: ' + String(e && e.message || e); } catch {} } }; es.onerror = () => { try { statusEl.textContent = 'mqtt_error'; } catch {} }; } catch (e) { const statusEl = document.getElementById('snapMqttStatus'); if (statusEl) statusEl.textContent = String(e && e.message || e); } }
+    function stopSnapMqtt() { try { if (window.esSnap) { window.esSnap.close(); window.esSnap = null; } const statusEl = document.getElementById('snapMqttStatus'); if (statusEl) statusEl.textContent = 'stopped'; } catch {} }
     function clearMsgText() { document.getElementById('msgText').value = ''; }
     async function loadSamples() { try { const r = await fetch('/api/dsapp/samples'); const j = await r.json(); const sel = document.getElementById('dsSample'); sel.innerHTML = ''; (j.samples||[]).forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.label; sel.appendChild(o); }); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
     async function startDsApp() { const sample = document.getElementById('dsSample').value || 'test1'; const image = document.getElementById('dsImage').value || ''; const text = document.getElementById('dsUris').value || ''; const uris = text.split('\n').map(s => s.trim()).filter(Boolean); const autoEngine = !!document.getElementById('dsAutoEngine').checked; try { const r = await fetch('/api/dsapp/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sample, uris, image, autoEngine }) }); const j = await r.json(); document.getElementById('dsStatus').textContent = JSON.stringify(j); } catch (e) { document.getElementById('dsStatus').textContent = e.message; } }
