@@ -73,6 +73,7 @@ MAX_TIME_STAMP_LEN = 32
 det_buf = {"frame": 0, "dets": []}
 det_pub = None
 mqtt_client = None
+mqtt_side = None
 def _mqtt_publish(topic, payload):
     if mqtt_client is None:
         return
@@ -99,6 +100,33 @@ def _mqtt_heartbeat_start():
     except Exception:
         pass
 snap_state = {"base": None, "deadline": 0, "meta": "", "meta_saved": False, "saved_kinds": set()}
+def _publish_snap_mqtt(image_bytes, ts_ms, suffix):
+    try:
+        if mqtt_side is None:
+            return
+        if suffix != "osd":
+            return
+        import base64
+        j = __import__("json")
+        cam = {
+            "device": os.getenv('DS_CAM_DEVICE', '/dev/video0'),
+            "width": int(os.getenv('DS_CAM_WIDTH', '640')),
+            "height": int(os.getenv('DS_CAM_HEIGHT', '480')),
+            "fps": os.getenv('DS_CAM_FPS', '30/1'),
+            "caps": os.getenv('DS_CAM_CAPS', 'image/jpeg')
+        }
+        payload = {
+            "ts_ms": int(ts_ms),
+            "frame_id": int(det_buf["frame"]),
+            "cam": cam,
+            "image_b64": base64.b64encode(image_bytes).decode("ascii"),
+            "detections": det_buf["dets"],
+            "meta": {"osd": True}
+        }
+        topic = os.getenv('DS_MQTT_SNAP_TOPIC', 'deepstream/snap')
+        mqtt_side.publish(topic, j.dumps(payload), qos=0, retain=False)
+    except Exception:
+        pass
 
 def _publish_detections(frame_num, dets):
     det_buf["frame"] = int(frame_num)
@@ -650,6 +678,10 @@ def main(args):
             _publish_img_b64(data, ts_ms/1000.0, kind)
         except Exception:
             pass
+        try:
+            _publish_snap_mqtt(data, ts_ms, kind)
+        except Exception:
+            pass
         if "clean" in snap_state["saved_kinds"] and "osd" in snap_state["saved_kinds"]:
             snap_state["base"] = None
         return Gst.FlowReturn.OK
@@ -695,8 +727,8 @@ def main(args):
             sub_period.subscribe(lambda msg: _on_period(type('M', (), {'data': msg.get('data', 0)})()))
         except Exception:
             pass
-    global mqtt_client
-    if mqtt is not None and (not enable_msg):
+    global mqtt_client, mqtt_side
+    if mqtt is not None:
         try:
             host = os.getenv('DS_MQTT_HOST', '127.0.0.1')
             port = int(os.getenv('DS_MQTT_PORT', '1883'))
@@ -705,8 +737,13 @@ def main(args):
             client.loop_start()
             mqtt_client = client
             _mqtt_heartbeat_start()
+            side = mqtt.Client()
+            side.connect(host, port, 60)
+            side.loop_start()
+            mqtt_side = side
         except Exception:
             mqtt_client = None
+            mqtt_side = None
     if enable_msg:
         mcfg = os.getenv('DS_MSGCONV_CONFIG', '/app/share/dstest4_msgconv_config.txt')
         pload = int(os.getenv('DS_MSGCONV_PAYLOAD_TYPE', '0'))
